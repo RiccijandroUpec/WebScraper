@@ -1,0 +1,172 @@
+# ============================================
+# docker-compose.yml - RickTech Ecosystem
+# ============================================
+# Uso:
+#   docker-compose up -d              # Iniciar todo
+#   docker-compose logs -f bot        # Ver logs del bot
+#   docker-compose down               # Detener todo
+#   docker-compose down -v            # Detener y borrar datos
+# ============================================
+
+version: '3.8'
+
+services:
+
+  # ==========================================
+  # BASE DE DATOS (MySQL)
+  # ==========================================
+  mysql:
+    image: mysql:8.0
+    container_name: ricktech-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: REDACTED_DB_ROOT_PASSWORD
+      MYSQL_DATABASE: ricktech
+      MYSQL_USER: ricktech_user
+      MYSQL_PASSWORD: REDACTED_DB_PASSWORD
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ricktech_network
+
+  # ==========================================
+  # EVOLUTION API (WhatsApp Gateway)
+  # ==========================================
+  evolution:
+    image: atendai/evolution-api:latest
+    container_name: ricktech-evolution
+    restart: unless-stopped
+    environment:
+      # Configuración del servidor
+      SERVER_URL: http://localhost:8080
+      PORT: 8080
+      
+      # Base de datos (usa SQLite por defecto, opcional MySQL)
+      DATABASE_ENABLED: true
+      DATABASE_PROVIDER: mysql
+      DATABASE_HOST: mysql
+      DATABASE_PORT: 3306
+      DATABASE_USER: ricktech_user
+      DATABASE_PASSWORD: REDACTED_DB_PASSWORD
+      DATABASE_NAME: ricktech
+      
+      # Autenticación
+      AUTHENTICATION_TYPE: apikey
+      AUTHENTICATION_API_KEY: evolution_api_key_2026
+      
+      # Webhook (apunta al bot)
+      WEBHOOK_URL: http://bot:3000/webhook
+      WEBHOOK_ENABLED: true
+      WEBHOOK_EVENTS: messages.upsert
+      
+      # Redis para caché (opcional, mejora rendimiento)
+      # REDIS_HOST: redis
+      # REDIS_PORT: 6379
+      
+      # Logs
+      LOG_LEVEL: info
+      LOG_COLOR: true
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+    networks:
+      - ricktech_network
+
+  # ==========================================
+  # BOT RICKTECH (WebScraper + DeepSeek)
+  # ==========================================
+  bot:
+    build: .
+    container_name: ricktech-bot
+    restart: unless-stopped
+    environment:
+      # Puerto
+      PORT: 3000
+      
+      # BeMovil
+      BEMOVIL_USER: ${BEMOVIL_USER}
+      BEMOVIL_PASS: ${BEMOVIL_PASS}
+      
+      # DeepSeek AI
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      
+      # Evolution API (por nombre de servicio interno)
+      EVOLUTION_API_URL: http://evolution:8080
+      EVOLUTION_API_TOKEN: evolution_api_key_2026
+      INSTANCE_NAME: ricktech
+      
+      # Base de datos (para persistencia de conversaciones)
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ricktech_user
+      DB_PASSWORD: REDACTED_DB_PASSWORD
+      DB_NAME: ricktech
+      
+      # Autorización
+      AUTHORIZED_NUMBERS: ${AUTHORIZED_NUMBERS:-*}
+    ports:
+      - "3000:3000"
+    volumes:
+      - bot_screenshots:/app
+    depends_on:
+      mysql:
+        condition: service_healthy
+      evolution:
+        condition: service_started
+    networks:
+      - ricktech_network
+
+  # ==========================================
+  # REDIS (Opcional - para caché y sesiones)
+  # ==========================================
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: ricktech-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - ricktech_network
+
+  # ==========================================
+  # PHPMyAdmin (Opcional - admin de BD)
+  # ==========================================
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: ricktech-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: ricktech_user
+      PMA_PASSWORD: REDACTED_DB_PASSWORD
+      UPLOAD_LIMIT: 100M
+    ports:
+      - "8081:80"
+    depends_on:
+      - mysql
+    networks:
+      - ricktech_network
+
+# ==========================================
+# VOLUMES
+# ==========================================
+volumes:
+  mysql_data:
+  bot_screenshots:
+
+# ==========================================
+# NETWORKS
+# ==========================================
+networks:
+  ricktech_network:
+    driver: bridge
