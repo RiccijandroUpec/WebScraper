@@ -1,6 +1,6 @@
 # 🤖 RickTech/BeMovil — WhatsApp Bot para Recargas y Pagos
 
-**Sistema automatizado** que conecta WhatsApp con la plataforma [BeMovil](https://bemovil.net) para realizar **recargas móviles** y **pago de servicios** en Ecuador usando **Inteligencia Artificial (DeepSeek AI)**, **Playwright** y **Evolution API**.
+**Sistema automatizado** que conecta WhatsApp con la plataforma [BeMovil](https://bemovil.net) para realizar **recargas móviles** y **pago de servicios** en Ecuador usando **Inteligencia Artificial (DeepSeek)**, **Playwright** y **Evolution API**.
 
 ---
 
@@ -14,6 +14,7 @@
 - [Lo que Falta Implementar ❌](#lo-que-falta-implementar-)
 - [Estructura del Proyecto](#estructura-del-proyecto)
 - [Instalación y Configuración](#instalación-y-configuración)
+- [Variables de Entorno](#variables-de-entorno)
 - [Endpoints de la API](#endpoints-de-la-api)
 - [Uso desde Línea de Comandos](#uso-desde-línea-de-comandos)
 - [Solución de Problemas](#solución-de-problemas)
@@ -23,7 +24,10 @@
 ## Estado del Proyecto
 
 ```
-⚙️  EN DESARROLLO — Funcionalidad base completa, pendientes mejoras críticas
+🚀 FUNCIONAL — El bot arranca, recibe mensajes, analiza con DeepSeek AI,
+           ejecuta el scraper y responde por WhatsApp.
+⚠️  PENDIENTE: Selectores del DOM de BeMovil requieren ajuste manual
+           y Evolution API debe estar configurada.
 ```
 
 ---
@@ -50,7 +54,7 @@
 │  2. Extrae mensaje (soporta v1 y v2 del API)               │
 │  3. Filtra mensajes propios (fromMe)                       │
 │  4. Verifica autorización del número                       │
-│  5. Consulta a DeepSeek AI para clasificar intención          │
+│  5. Consulta a DeepSeek AI para clasificar intención       │
 │  6. Mantiene contexto de conversación (30 min)              │
 │  7. Si datos completos → ejecuta scraper                   │
 │  8. Responde al usuario por WhatsApp                       │
@@ -88,16 +92,16 @@
 | **Playwright** | v1.61.0 | Automatización de navegador (scraper) |
 | **Chromium** | (incluido) | Motor de navegación headless |
 | **dotenv** | v17.4.2 | Carga de variables de entorno (.env) |
-| **DeepSeek AI API** | deepseek-chat | Procesamiento de lenguaje natural (NLP) |
+| **DeepSeek AI** | deepseek-chat | Procesamiento de lenguaje natural (NLP) |
 | **Evolution API** | v2.x | Gateway WhatsApp (webhook) |
 | **BeMovil** | — | Plataforma de recargas y pagos (target) |
 
-### APIs Externas Consumidas
+### APIs Externas
 
-1. **DeepSeek AI** `https://api.deepseek.com/v1beta/models/deepseek-chat:generateContent`
-   - Usada para: análisis de intención, extracción de datos, mantenimiento de contexto
-2. **Evolution API** `http://localhost:8080/message/sendText/{instance}`
-   - Usada para: enviar mensajes de texto e imágenes de vuelta al usuario
+| API | Endpoint | Costo | Uso |
+|---|---|---|---|
+| **DeepSeek** | `POST https://api.deepseek.com/chat/completions` | ~$0.14/1M tokens | Análisis de intención, contexto, extracción de datos |
+| **Evolution API** | `POST http://localhost:8080/message/sendText/{instance}` | Gratis (local) | Envío de mensajes e imágenes a WhatsApp |
 
 ---
 
@@ -129,20 +133,20 @@
 11. Guarda log en transactions.json
 ```
 
-### 🔄 Ciclo de Conversación Multi-Mensaje
+### 🔄 Ciclo de Conversación Multi-Mensaje (con contexto)
 
 ```
 Usuario: "Quiero una recarga"
-  → DeepSeek: intent="topup", is_complete=false, missing_fields=["operator","phone","amount"]
+  → DeepSeek: intent="topup", is_complete=false
   → Bot: "¿Para qué operadora, número y monto?"
 
-Usuario: "A Claro"
-  → DeepSeek: rellena "operator"="Claro" del contexto, sigue faltando phone y amount
+Usuario: "A Movistar"
+  → DeepSeek: conserva "operator"="Movistar" en contexto, faltan phone y amount
   → Bot: "¿Cuál es el número y el monto?"
 
-Usuario: "0991234567, $5"
-  → DeepSeek: completó todos los datos, is_complete=true
-  → Bot: ejecuta recarga
+Usuario: "0991234567, $10"
+  → DeepSeek: usa contexto (Movistar) + datos nuevos → is_complete=true
+  → Bot: ejecuta recarga de $10 a Movistar 0991234567
 ```
 
 ---
@@ -154,68 +158,67 @@ Usuario: "0991234567, $5"
 | # | Funcionalidad | Archivo | Detalle Técnico |
 |---|---|---|---|
 | 1 | **Webhook Evolution API** | `server.js` | Soporte para Evolution API v1 y v2. Extrae `conversation`, `extendedTextMessage` e `imageMessage.caption` |
-| 2 | **Autenticación en BeMovil** | `scraper.js` | Login con selección de país (+593 Ecuador), usuario + contraseña con 2 pasos, espera de URL `/backoffice/**` |
+| 2 | **Autenticación en BeMovil** | `scraper.js` | Login con selección de país (+593 Ecuador), 2 pasos (usuario → contraseña), espera de URL `/backoffice/**` |
 | 3 | **Recargas (sellTopup)** | `scraper.js` | Navega a `/backoffice/sell`, busca operadora por texto, inputs por placeholder, botones por regex, captura screenshots |
 | 4 | **Pago de Servicios (payBill)** | `scraper.js` | Navega a `/backoffice/collection`, busca servicio, ingresa referencia, captura resultado |
-| 5 | **Análisis con DeepSeek AI** | `server.js` | Prompt estructurado con 8 reglas, operadoras válidas, servicios válidos, formato JSON estricto |
-| 6 | **Persistencia de Conversación** | `server.js` | `Map<remoteJid, Conversation>` con timeout de 30 min, limpieza automática cada 5 min |
+| 5 | **Análisis con DeepSeek AI** | `server.js` | Prompt con contexto, operadoras válidas, servicios válidos, formato JSON estricto, manejo de saludos y desconocidos |
+| 6 | **Contexto de Conversación** | `server.js` | `Map<remoteJid, Conversation>` con timeout de 30 min, limpieza automática cada 5 min, merge de datos parciales |
 | 7 | **Filtro de Autorización** | `server.js` | Variable `AUTHORIZED_NUMBERS` en `.env`. Soporta lista separada por comas o `*` para todos |
 | 8 | **Logs de Transacciones** | `server.js` | Archivo `transactions.json` con tipo, datos, estado, error y timestamp. Últimas 1000 transacciones |
-| 9 | **Envío de Imágenes** | `server.js` | Función `sendImageMessage()` que codifica imagen a base64 y envía vía Evolution API |
+| 9 | **Envío de Imágenes** | `server.js` | Función `sendImageMessage()` codifica imagen a base64 y envía vía Evolution API |
 | 10 | **Endpoints /health y /stats** | `server.js` | Health check con uptime/memoria/conversaciones activas. Stats con conteo de transacciones |
 | 11 | **Saludos e Intención Desconocida** | `server.js` | Detecta `intent: "greeting"` y responde presentación. `intent: "unknown"` pide aclaración |
 | 12 | **Manejo de Errores** | `scraper.js` | Captura errores, toma screenshot, retorna `{success: false, error: mensaje}` |
 | 13 | **CLI para pruebas** | `scraper.js` | `node scraper.js topup "Claro" 0991234567 5` y `node scraper.js bill "CNEL" 1234567890` |
 | 14 | **Guía de Configuración** | `SETUP.md` | Pasos para obtener API Key de DeepSeek, configurar Evolution API y desplegar |
 
-### ✅ Mejoras Técnicas Incluidas
+### ✅ Mejoras Técnicas
 
 - **Selectores dinámicos**: Busca inputs por placeholder, tipo y posición; botones por regex de texto
 - **Screenshots automáticos**: Captura resultados exitosos y errores para debugging
 - **Detección de éxito/error**: Busca palabras clave en la página después de la transacción
 - **Timeout en navegador**: Chromium con `--no-sandbox` para entornos restringidos
-- **Expresiones regulares**: Para buscar botones (Vender|Realizar venta|Continuar), confirmaciones (Confirmar|Sí|Aceptar), errores (error|falló|rechazada)
+- **Expresiones regulares**: Para buscar botones y confirmaciones
+- **Merge de contexto**: Combina datos de mensajes anteriores con los nuevos automáticamente
 
 ---
 
 ## Lo que Falta Implementar ❌
 
-### 🔴 Crítico — Imprescindible para funcionar al 100%
+### 🔴 Crítico
 
-| # | Pendiente | Impacto | Solución Propuesta |
+| # | Pendiente | Impacto | Solución |
 |---|---|---|---|
-| 1 | **API Key real de DeepSeek AI** | El bot no puede analizar mensajes sin una clave válida. La actual (`sk-tu-api-key`) parece de OpenAI, no funciona con DeepSeek | Obtener clave en https://platform.deepseek.com/api_keys y ponerla en `.env` como `GEMINI_API_KEY` |
-| 2 | **Selectores exactos del DOM post-login** | El scraper usa selectores genéricos (por placeholder, posición, texto). Si el dashboard de BeMovil cambia, falla | Ejecutar el scraper y analizar los screenshots para ajustar selectores a clases CSS y atributos reales |
-| 3 | **Manejo de stock/saldo insuficiente** | Si la cuenta de BeMovil no tiene saldo, el scraper intenta vender igual y falla sin avisar al usuario | Detectar mensajes de "saldo insuficiente", "fondos insuficientes" y notificar al usuario |
+| 1 | **Selectores exactos del DOM post-login** | El scraper usa selectores genéricos. Si BeMovil cambia, falla | Ejecutar scraper y ajustar selectores a clases CSS reales según screenshots |
+| 2 | **Manejo de stock/saldo insuficiente** | Si no hay saldo, el scraper falla sin avisar al usuario | Detectar "saldo insuficiente" y notificar |
+| 3 | **Confirmación antes de ejecutar** | Ejecuta inmediatamente al tener todos los datos | Pedir "¿Confirmas la recarga de $5 a Claro 0991234567?" |
 
-### 🟠 Alto — Mejora significativa de funcionalidad
+### 🟠 Alto
 
-| # | Pendiente | Impacto | Solución Propuesta |
+| # | Pendiente | Impacto | Solución |
 |---|---|---|---|
-| 4 | **Base de datos persistente** | Las conversaciones se pierden al reiniciar el servidor (Map en memoria) | Usar SQLite o Redis para persistencia de contexto entre reinicios |
-| 5 | **Manejo de múltiples operadoras** | Solo recarga en la operadora que se menciona. No detecta variantes ("$10 de claro", "recarga claro $5") | Mejorar prompt de DeepSeek con más ejemplos de lenguaje natural |
-| 6 | **Validación de montos mínimos/máximos** | El usuario puede pedir montos no soportados por BeMovil ($0.50, $1000) | Agregar validación de montos (ej. $1-$50) antes de ejecutar scraper |
-| 7 | **Notificación proactiva al usuario** | El usuario no sabe si la operación fue exitosa hasta que el bot responde (puede tardar segundos) | Enviar estado "procesando..." inmediatamente, luego el resultado |
-| 8 | **Confirmación antes de ejecutar** | El bot ejecuta inmediatamente cuando tiene todos los datos | Pedir confirmación: "¿Confirmas la recarga de $5 a Claro 0991234567?" |
+| 4 | **Base de datos persistente** | Conversaciones se pierden al reiniciar | SQLite o Redis para persistencia |
+| 5 | **Validación de montos mínimos/máximos** | Usuario puede pedir montos no soportados | Validar $1-$50 antes de ejecutar |
+| 6 | **Notificación proactiva al usuario** | Usuario no sabe si fue exitoso hasta que responde | Enviar "procesando..." inmediato |
+| 7 | **Más variantes de lenguaje** | Algunas formas de pedir recarga no se detectan | Mejorar prompt con más ejemplos |
 
-### 🟡 Media — Completitud del sistema
+### 🟡 Media
 
-| # | Pendiente | Impacto | Solución Propuesta |
-|---|---|---|---|
-| 9 | **Soporte para más servicios** | Solo CNEL, CNT, ETAPA, Agua Quito, Municipio Guayaquil, Registro Civil | Agregar más servicios al prompt de DeepSeek |
-| 10 | **Logging en archivo separado** | Los logs solo van a consola, se pierden al reiniciar | Implementar `winston` o `pino` para logs rotativos |
-| 11 | **Dashboard web de administración** | No hay UI para ver transacciones o estado del bot | Crear panel web con HTML/JS que consuma `/stats` |
-| 12 | **Límite de transacciones por día** | Un usuario podría abusar del sistema sin control | Agregar rate limiting por número (ej. 10 recargas/día) |
-| 13 | **Manejo de 2FA en BeMovil** | Si BeMovil pide verificación en dos pasos, el login falla | Detectar si aparece solicitud de 2FA y notificar al admin |
+| # | Pendiente | Solución Propuesta |
+|---|---|---|
+| 8 | Más servicios en prompt | Agregar más servicios al prompt de DeepSeek |
+| 9 | Logging en archivo | Implementar winston/pino para logs rotativos |
+| 10 | Dashboard web | Panel HTML/JS que consuma `/stats` |
+| 11 | Rate limiting | Límite de 10 recargas/día por número |
+| 12 | Manejo de 2FA | Detectar 2FA en BeMovil y notificar al admin |
 
-### 🟢 Baja — Mejoras cosméticas/de conveniencia
+### 🟢 Baja
 
-| # | Pendiente | Impacto | Solución Propuesta |
-|---|---|---|---|
-| 14 | **Múltiples idiomas** | Solo responde en español | Agregar detección de idioma del mensaje |
-| 15 | **Mensajes con formato** | Los emojis pueden no renderizarse igual en todos los WhatsApp | Probar y ajustar caracteres especiales |
-| 16 | **Pruebas unitarias** | No hay tests automatizados | Agregar tests con Jest para server.js y scraper.js |
-| 17 | **Dockerización** | Depende de Chromium instalado en el sistema | Crear Dockerfile con Playwright y Chromium incluidos |
+| # | Pendiente | Solución Propuesta |
+|---|---|---|
+| 13 | Múltiples idiomas | Detección de idioma del mensaje |
+| 14 | Pruebas unitarias | Tests con Jest |
+| 15 | Dockerización | Dockerfile con Chromium incluido |
 
 ---
 
@@ -223,19 +226,21 @@ Usuario: "0991234567, $5"
 
 ```
 📁 webscrapper/
-├── 📄 server.js              # Servidor Express con webhook y endpoints
-├── 📄 scraper.js             # Automatización con Playwright para BeMovil
-├── 📄 .env                   # Variables de entorno (NO SUBIR A GIT)
-├── 📄 .env.example           # Ejemplo de variables de entorno
-├── 📄 package.json           # Dependencias y scripts
-├── 📄 package-lock.json      # Lockfile de dependencias
-├── 📄 README.md              # Esta documentación
-├── 📄 SETUP.md               # Guía rápida de configuración
-├── 📄 transactions.json      # Log de transacciones (se crea automáticamente)
-├── 📄 dashboard.html         # HTML descargado del login de BeMovil (debug)
-├── 📄 dashboard.png          # Screenshot del login (debug)
-├── 📄 dom.html               # DOM extraído de BeMovil (debug)
-├── 📁 node_modules/          # Dependencias instaladas (ignorar)
+├── 📄 server.js              # 🔧 Servidor Express + webhook + DeepSeek AI + contexto + logs + stats (446 líneas)
+├── 📄 scraper.js             # 🔧 Automatización Playwright para BeMovil (login, recargas, pagos)
+├── 📄 .env                   # 🔒 Variables de entorno (NO SUBIR A GIT)
+├── 📄 .env.example           # 📝 Ejemplo de variables
+├── 📄 package.json           # 📦 Dependencias y scripts
+├── 📄 package-lock.json      # 🔒 Lockfile
+├── 📄 README.md              # 📖 Documentación
+├── 📄 SETUP.md               # 📖 Guía rápida
+├── 📄 transactions.json      # 📊 Log de transacciones (se genera automáticamente)
+├── 📄 dashboard.html         # 🐛 Debug: HTML del login de BeMovil
+├── 📄 dashboard.png          # 🐛 Debug: screenshot del login
+├── 📄 dom.html               # 🐛 Debug: DOM extraído
+├── 📄 login_page.png         # 🐛 Debug: screenshot login
+├── 📄 dashboard_texts.json   # 🐛 Debug: textos del DOM
+├── 📁 node_modules/          # 📦 Dependencias (ignorado por git)
 ```
 
 ---
@@ -245,75 +250,114 @@ Usuario: "0991234567, $5"
 ### Prerrequisitos
 
 ```bash
-# Node.js v18+
-node --version   # v24.12.0
-
-# Playwright con Chromium
+node --version   # v18+ (v24.12.0 recomendado)
 npx playwright install chromium
 ```
 
-### Instalación Rápida
+### Instalación
 
 ```bash
-# 1. Clonar o copiar el proyecto
-cd webscrapper
-
-# 2. Instalar dependencias
+git clone https://github.com/RiccijandroUpec/WebScraper.git
+cd WebScraper
 npm install
-
-# 3. Instalar navegador Chromium para Playwright
 npx playwright install chromium
-
-# 4. Configurar .env (ver SETUP.md para detalles)
-#    - Obtener API Key de DeepSeek en https://platform.deepseek.com/api_keys
-#    - Configurar Evolution API (token e instancia)
-
-# 5. Iniciar el servidor
-node server.js
 ```
 
-### Variables de Entorno (`.env`)
+### Configurar `.env`
+
+```bash
+cp .env.example .env
+# Editar .env con tus credenciales
+```
+
+### Iniciar
+
+```bash
+npm start
+```
+
+Verás:
+
+```
+===============================================
+    RICKTECH/BEMOVIL WHATSAPP BOT
+===============================================
+  Puerto:        3000
+  Webhook:       /webhook
+  Health:        /health
+  Stats:         /stats
+  Evolution API: http://localhost:8080
+  DeepSeek API:  OK
+  Aut. Numbers:  Todos
+===============================================
+```
+
+---
+
+## Variables de Entorno
+
+```env
+# === CREDENCIALES BEMOVIL ===
+BEMOVIL_USER=REDACTED_USER
+BEMOVIL_PASS=tu_contraseña
+
+# === DEEPSEEK AI (para analizar mensajes) ===
+DEEPSEEK_API_KEY=sk-tu-api-key-de-deepseek
+
+# === EVOLUTION API (gateway WhatsApp) ===
+EVOLUTION_API_URL=http://localhost:8080
+EVOLUTION_API_TOKEN=tu_token_evolution
+INSTANCE_NAME=tu_instancia
+
+# === OPCIONAL ===
+# AUTHORIZED_NUMBERS=593991234567,593998765432   # * = todos
+# PORT=3000
+```
 
 | Variable | Obligatorio | Descripción |
 |---|---|---|
-| `BEMOVIL_USER` | ✅ Sí | Usuario de BeMovil |
-| `BEMOVIL_PASS` | ✅ Sí | Contraseña de BeMovil |
-| `GEMINI_API_KEY` | ✅ Sí | API Key de DeepSeek AI (fallback a `OPENAI_API_KEY`) |
-| `EVOLUTION_API_URL` | ✅ Sí | URL de Evolution API (default: http://localhost:8080) |
-| `EVOLUTION_API_TOKEN` | ✅ Sí | Token de autenticación de Evolution API |
-| `INSTANCE_NAME` | ✅ Sí | Nombre de la instancia en Evolution API |
-| `AUTHORIZED_NUMBERS` | ❌ No | Números autorizados separados por coma. `*` = todos |
-| `PORT` | ❌ No | Puerto del servidor (default: 3000) |
+| `BEMOVIL_USER` | ✅ | Usuario de BeMovil |
+| `BEMOVIL_PASS` | ✅ | Contraseña de BeMovil |
+| `DEEPSEEK_API_KEY` | ✅ | API Key de DeepSeek (fallback a `OPENAI_API_KEY`) |
+| `EVOLUTION_API_URL` | ✅ | URL de Evolution API (default: `http://localhost:8080`) |
+| `EVOLUTION_API_TOKEN` | ✅ | Token de autenticación |
+| `INSTANCE_NAME` | ✅ | Nombre de la instancia en Evolution API |
+| `AUTHORIZED_NUMBERS` | ❌ | Números autorizados. `*` = todos |
+| `PORT` | ❌ | Puerto (default: 3000) |
+
+> `DEEPSEEK_API_KEY` también acepta `OPENAI_API_KEY` como fallback (mismo formato de API).
 
 ---
 
 ## Endpoints de la API
 
-| Método | Ruta | Descripción | Respuesta |
-|---|---|---|---|
-| `POST` | `/webhook` | Webhook para Evolution API | `{ status: "ok" }` (inmediato) |
-| `GET` | `/health` | Estado del servidor | `{ status, uptime, timestamp, memory, conversations_active }` |
-| `GET` | `/stats` | Estadísticas de transacciones | `{ total_transactions, topups, bills, last_10 }` |
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/webhook` | Webhook para Evolution API |
+| `GET` | `/health` | Health check (uptime, memoria, conversaciones) |
+| `GET` | `/stats` | Estadísticas de transacciones |
 
-### Ejemplo de respuesta `/health`
+### `/health`
+
+```bash
+curl http://localhost:3000/health
+```
 
 ```json
 {
   "status": "ok",
   "uptime": 1234.56,
   "timestamp": "2026-06-21T20:34:39.066Z",
-  "memory": {
-    "rss": 126722048,
-    "heapTotal": 115740672,
-    "heapUsed": 57218440,
-    "external": 3744946,
-    "arrayBuffers": 20593
-  },
+  "memory": { "rss": 126722048, "heapTotal": 115740672, "heapUsed": 57218440 },
   "conversations_active": 0
 }
 ```
 
-### Ejemplo de respuesta `/stats`
+### `/stats`
+
+```bash
+curl http://localhost:3000/stats
+```
 
 ```json
 {
@@ -321,15 +365,13 @@ node server.js
   "topups": { "total": 10, "success": 8, "failed": 2 },
   "bills": { "total": 5, "success": 4, "failed": 1 },
   "active_conversations": 0,
-  "last_10": [ { "type": "topup", "operator": "Claro", ... } ]
+  "last_10": [{ "type": "topup", "operator": "Claro", "status": "success" }]
 }
 ```
 
 ---
 
 ## Uso desde Línea de Comandos
-
-El scraper puede ejecutarse independientemente del servidor para pruebas:
 
 ```bash
 # Recarga
@@ -338,43 +380,64 @@ node scraper.js topup "Claro" 0991234567 5
 # Pago de servicio
 node scraper.js bill "CNEL" 1234567890
 
-# Ver resultado de salida
-node scraper.js topup "Claro" 0991234567 5 && echo "✅ Éxito" || echo "❌ Falló"
+# Ver código de salida
+node scraper.js topup "Claro" 0991234567 5 && echo "Exito" || echo "Fallo"
 ```
 
-### Parámetros
-
-| Comando | Argumento 1 | Argumento 2 | Argumento 3 |
+| Comando | Arg 1 | Arg 2 | Arg 3 |
 |---|---|---|---|
-| `topup` | Operadora (ej: "Claro", "Movistar") | Teléfono (10 dígitos) | Monto (ej: 5, 10, 20) |
-| `bill` | Servicio (ej: "CNEL", "CNT") | Referencia (cédula/contrato) | — |
+| `topup` | Operadora (Claro, Movistar, CNT, Tuenti, OpenMobile) | Teléfono (10 dígitos) | Monto (5, 10, 20) |
+| `bill` | Servicio (CNEL, CNT, ETAPA, Agua Quito) | Referencia (cédula/contrato) | — |
+
+---
+
+## Scripts NPM
+
+```bash
+npm start         # Iniciar servidor
+npm run dev       # Iniciar con --watch (reinicio automático al editar)
+npm test          # Probar scraper: recarga $1 a Claro 0991234567
+npm run test:bill # Probar scraper: consulta CNEL
+npm run health    # curl http://localhost:3000/health
+npm run stats     # curl http://localhost:3000/stats
+```
 
 ---
 
 ## Solución de Problemas
 
-### Error: `ECONNREFUSED` al conectar con Evolution API
+### `ECONNREFUSED` con Evolution API
 ```
 Causa: Evolution API no está corriendo
-Solución: Iniciar Evolution API y verificar URL en .env
+Solucion: Iniciar Evolution API y verificar URL en .env
 ```
 
-### Error: Playwright no encuentra Chromium
+### Playwright no encuentra Chromium
 ```
 Causa: Chromium no instalado
-Solución: npx playwright install chromium
+Solucion: npx playwright install chromium
 ```
 
-### Error: DeepSeek devuelve respuestas vacías
+### DeepSeek 401 Unauthorized
 ```
-Causa: API Key inválida o sin créditos
-Solución: Verificar que GEMINI_API_KEY en .env sea una clave real de Google AI Studio
+Causa: API Key inválida o desactivada
+Solucion:
+  1. Ir a https://platform.deepseek.com/api_keys
+  2. Verificar toggle verde (activated)
+  3. Copiar key correcta a DEEPSEEK_API_KEY en .env
 ```
 
-### Error: Login en BeMovil falla
+### DeepSeek 402 Payment Required
 ```
-Causa: Credenciales incorrectas o cambios en la página de login
-Solución: Verificar BEMOVIL_USER y BEMOVIL_PASS en .env. Revisar screenshot login_page.png
+Causa: Saldo insuficiente
+Solucion: Ir a https://platform.deepseek.com/top_up
+```
+
+### Login en BeMovil falla
+```
+Causa: Credenciales incorrectas o cambios en el login
+Solucion: Verificar BEMOVIL_USER y BEMOVIL_PASS en .env
+         Revisar login_page.png para ver el error
 ```
 
 ---
@@ -382,3 +445,9 @@ Solución: Verificar BEMOVIL_USER y BEMOVIL_PASS en .env. Revisar screenshot log
 ## Licencia
 
 **Uso privado — RickTech** © 2026
+
+---
+
+## Repositorio
+
+https://github.com/RiccijandroUpec/WebScraper
