@@ -14,7 +14,7 @@ const app = express();
 app.use(bodyParser.json());
 
 const PORT = process.env.PORT || 3000;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'http://localhost:8080';
 const EVOLUTION_API_TOKEN = process.env.EVOLUTION_API_TOKEN || '';
 const INSTANCE_NAME = process.env.INSTANCE_NAME || '';
@@ -131,7 +131,7 @@ async function sendImageMessage(remoteJid, imagePath, caption) {
 }
 
 // ============================================================
-// GEMINI AI
+// DEEPSEEK AI
 // ============================================================
 
 async function analyzeIntent(userMessage, context) {
@@ -196,30 +196,40 @@ async function analyzeIntent(userMessage, context) {
   try {
     var fullPrompt = systemPrompt + '\\n\\nMensaje del usuario: ' + userMessage;
     const response = await axios.post(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + GEMINI_API_KEY,
+      'https://api.deepseek.com/chat/completions',
       {
-        contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 500 }
+        model: 'deepseek-chat',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.1,
+        max_tokens: 500
       },
-      { timeout: 15000 }
+      {
+        headers: {
+          'Authorization': 'Bearer ' + DEEPSEEK_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        timeout: 15000
+      }
     );
 
     var text = null;
-    if (response.data && response.data.candidates && response.data.candidates[0] &&
-        response.data.candidates[0].content && response.data.candidates[0].content.parts &&
-        response.data.candidates[0].content.parts[0]) {
-      text = response.data.candidates[0].content.parts[0].text;
+    if (response.data && response.data.choices && response.data.choices[0] &&
+        response.data.choices[0].message && response.data.choices[0].message.content) {
+      text = response.data.choices[0].message.content;
     }
 
     if (!text) {
-      console.error('[GEMINI] Respuesta vacia:', JSON.stringify(response.data));
+      console.error('[DEEPSEEK] Respuesta vacia:', JSON.stringify(response.data));
       return null;
     }
 
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(text);
   } catch (error) {
-    console.error('[GEMINI] Error:', error && error.response && error.response.data || error.message);
+    console.error('[DEEPSEEK] Error:', error && error.response && error.response.data || error.message);
     return null;
   }
 }
@@ -435,7 +445,7 @@ app.listen(PORT, function() {
   console.log('  Health:        /health');
   console.log('  Stats:         /stats');
   console.log('  Evolution API: ' + EVOLUTION_API_URL);
-  console.log('  Gemini API:    ' + (GEMINI_API_KEY ? 'OK' : 'FALTA KEY'));
+  console.log('  DeepSeek API:  ' + (DEEPSEEK_API_KEY ? 'OK' : 'FALTA KEY'));
   console.log('  Aut. Numbers:  ' + (AUTHORIZED_NUMBERS === '*' ? 'Todos' : AUTHORIZED_NUMBERS));
   console.log('===============================================');
   console.log('');

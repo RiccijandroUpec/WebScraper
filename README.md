@@ -1,6 +1,6 @@
 # 🤖 RickTech/BeMovil — WhatsApp Bot para Recargas y Pagos
 
-**Sistema automatizado** que conecta WhatsApp con la plataforma [BeMovil](https://bemovil.net) para realizar **recargas móviles** y **pago de servicios** en Ecuador usando **Inteligencia Artificial (Google Gemini)**, **Playwright** y **Evolution API**.
+**Sistema automatizado** que conecta WhatsApp con la plataforma [BeMovil](https://bemovil.net) para realizar **recargas móviles** y **pago de servicios** en Ecuador usando **Inteligencia Artificial (DeepSeek AI)**, **Playwright** y **Evolution API**.
 
 ---
 
@@ -50,7 +50,7 @@
 │  2. Extrae mensaje (soporta v1 y v2 del API)               │
 │  3. Filtra mensajes propios (fromMe)                       │
 │  4. Verifica autorización del número                       │
-│  5. Consulta a Gemini AI para clasificar intención          │
+│  5. Consulta a DeepSeek AI para clasificar intención          │
 │  6. Mantiene contexto de conversación (30 min)              │
 │  7. Si datos completos → ejecuta scraper                   │
 │  8. Responde al usuario por WhatsApp                       │
@@ -84,17 +84,17 @@
 | **Node.js** | v24.12.0 | Runtime del servidor |
 | **Express.js** | v5.2.1 | Framework HTTP, manejo de rutas y webhooks |
 | **body-parser** | v2.3.0 | Parseo de JSON en peticiones entrantes |
-| **Axios** | v1.18.0 | Cliente HTTP para Evolution API y Gemini API |
+| **Axios** | v1.18.0 | Cliente HTTP para Evolution API y DeepSeek API |
 | **Playwright** | v1.61.0 | Automatización de navegador (scraper) |
 | **Chromium** | (incluido) | Motor de navegación headless |
 | **dotenv** | v17.4.2 | Carga de variables de entorno (.env) |
-| **Google Gemini API** | gemini-1.5-flash | Procesamiento de lenguaje natural (NLP) |
+| **DeepSeek AI API** | deepseek-chat | Procesamiento de lenguaje natural (NLP) |
 | **Evolution API** | v2.x | Gateway WhatsApp (webhook) |
 | **BeMovil** | — | Plataforma de recargas y pagos (target) |
 
 ### APIs Externas Consumidas
 
-1. **Google Gemini** `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`
+1. **DeepSeek AI** `https://api.deepseek.com/v1beta/models/deepseek-chat:generateContent`
    - Usada para: análisis de intención, extracción de datos, mantenimiento de contexto
 2. **Evolution API** `http://localhost:8080/message/sendText/{instance}`
    - Usada para: enviar mensajes de texto e imágenes de vuelta al usuario
@@ -109,8 +109,8 @@
 1. Usuario escribe: "Recarga $5 a Claro 0991234567"
 2. Evolution API recibe el mensaje → POST a /webhook
 3. server.js extrae el mensaje, verifica fromMe y autorización
-4. Envía prompt con contexto a Gemini AI
-5. Gemini devuelve JSON:
+4. Envía prompt con contexto a DeepSeek AI
+5. DeepSeek devuelve JSON:
    {
      "intent": "topup",
      "is_complete": true,
@@ -133,15 +133,15 @@
 
 ```
 Usuario: "Quiero una recarga"
-  → Gemini: intent="topup", is_complete=false, missing_fields=["operator","phone","amount"]
+  → DeepSeek: intent="topup", is_complete=false, missing_fields=["operator","phone","amount"]
   → Bot: "¿Para qué operadora, número y monto?"
 
 Usuario: "A Claro"
-  → Gemini: rellena "operator"="Claro" del contexto, sigue faltando phone y amount
+  → DeepSeek: rellena "operator"="Claro" del contexto, sigue faltando phone y amount
   → Bot: "¿Cuál es el número y el monto?"
 
 Usuario: "0991234567, $5"
-  → Gemini: completó todos los datos, is_complete=true
+  → DeepSeek: completó todos los datos, is_complete=true
   → Bot: ejecuta recarga
 ```
 
@@ -157,7 +157,7 @@ Usuario: "0991234567, $5"
 | 2 | **Autenticación en BeMovil** | `scraper.js` | Login con selección de país (+593 Ecuador), usuario + contraseña con 2 pasos, espera de URL `/backoffice/**` |
 | 3 | **Recargas (sellTopup)** | `scraper.js` | Navega a `/backoffice/sell`, busca operadora por texto, inputs por placeholder, botones por regex, captura screenshots |
 | 4 | **Pago de Servicios (payBill)** | `scraper.js` | Navega a `/backoffice/collection`, busca servicio, ingresa referencia, captura resultado |
-| 5 | **Análisis con Gemini AI** | `server.js` | Prompt estructurado con 8 reglas, operadoras válidas, servicios válidos, formato JSON estricto |
+| 5 | **Análisis con DeepSeek AI** | `server.js` | Prompt estructurado con 8 reglas, operadoras válidas, servicios válidos, formato JSON estricto |
 | 6 | **Persistencia de Conversación** | `server.js` | `Map<remoteJid, Conversation>` con timeout de 30 min, limpieza automática cada 5 min |
 | 7 | **Filtro de Autorización** | `server.js` | Variable `AUTHORIZED_NUMBERS` en `.env`. Soporta lista separada por comas o `*` para todos |
 | 8 | **Logs de Transacciones** | `server.js` | Archivo `transactions.json` con tipo, datos, estado, error y timestamp. Últimas 1000 transacciones |
@@ -166,7 +166,7 @@ Usuario: "0991234567, $5"
 | 11 | **Saludos e Intención Desconocida** | `server.js` | Detecta `intent: "greeting"` y responde presentación. `intent: "unknown"` pide aclaración |
 | 12 | **Manejo de Errores** | `scraper.js` | Captura errores, toma screenshot, retorna `{success: false, error: mensaje}` |
 | 13 | **CLI para pruebas** | `scraper.js` | `node scraper.js topup "Claro" 0991234567 5` y `node scraper.js bill "CNEL" 1234567890` |
-| 14 | **Guía de Configuración** | `SETUP.md` | Pasos para obtener API Key de Gemini, configurar Evolution API y desplegar |
+| 14 | **Guía de Configuración** | `SETUP.md` | Pasos para obtener API Key de DeepSeek, configurar Evolution API y desplegar |
 
 ### ✅ Mejoras Técnicas Incluidas
 
@@ -184,7 +184,7 @@ Usuario: "0991234567, $5"
 
 | # | Pendiente | Impacto | Solución Propuesta |
 |---|---|---|---|
-| 1 | **API Key real de Google Gemini** | El bot no puede analizar mensajes sin una clave válida. La actual (`sk-tu-api-key`) parece de OpenAI, no funciona con Gemini | Obtener clave en https://aistudio.google.com/apikey y ponerla en `.env` como `GEMINI_API_KEY` |
+| 1 | **API Key real de DeepSeek AI** | El bot no puede analizar mensajes sin una clave válida. La actual (`sk-tu-api-key`) parece de OpenAI, no funciona con DeepSeek | Obtener clave en https://platform.deepseek.com/api_keys y ponerla en `.env` como `GEMINI_API_KEY` |
 | 2 | **Selectores exactos del DOM post-login** | El scraper usa selectores genéricos (por placeholder, posición, texto). Si el dashboard de BeMovil cambia, falla | Ejecutar el scraper y analizar los screenshots para ajustar selectores a clases CSS y atributos reales |
 | 3 | **Manejo de stock/saldo insuficiente** | Si la cuenta de BeMovil no tiene saldo, el scraper intenta vender igual y falla sin avisar al usuario | Detectar mensajes de "saldo insuficiente", "fondos insuficientes" y notificar al usuario |
 
@@ -193,7 +193,7 @@ Usuario: "0991234567, $5"
 | # | Pendiente | Impacto | Solución Propuesta |
 |---|---|---|---|
 | 4 | **Base de datos persistente** | Las conversaciones se pierden al reiniciar el servidor (Map en memoria) | Usar SQLite o Redis para persistencia de contexto entre reinicios |
-| 5 | **Manejo de múltiples operadoras** | Solo recarga en la operadora que se menciona. No detecta variantes ("$10 de claro", "recarga claro $5") | Mejorar prompt de Gemini con más ejemplos de lenguaje natural |
+| 5 | **Manejo de múltiples operadoras** | Solo recarga en la operadora que se menciona. No detecta variantes ("$10 de claro", "recarga claro $5") | Mejorar prompt de DeepSeek con más ejemplos de lenguaje natural |
 | 6 | **Validación de montos mínimos/máximos** | El usuario puede pedir montos no soportados por BeMovil ($0.50, $1000) | Agregar validación de montos (ej. $1-$50) antes de ejecutar scraper |
 | 7 | **Notificación proactiva al usuario** | El usuario no sabe si la operación fue exitosa hasta que el bot responde (puede tardar segundos) | Enviar estado "procesando..." inmediatamente, luego el resultado |
 | 8 | **Confirmación antes de ejecutar** | El bot ejecuta inmediatamente cuando tiene todos los datos | Pedir confirmación: "¿Confirmas la recarga de $5 a Claro 0991234567?" |
@@ -202,7 +202,7 @@ Usuario: "0991234567, $5"
 
 | # | Pendiente | Impacto | Solución Propuesta |
 |---|---|---|---|
-| 9 | **Soporte para más servicios** | Solo CNEL, CNT, ETAPA, Agua Quito, Municipio Guayaquil, Registro Civil | Agregar más servicios al prompt de Gemini |
+| 9 | **Soporte para más servicios** | Solo CNEL, CNT, ETAPA, Agua Quito, Municipio Guayaquil, Registro Civil | Agregar más servicios al prompt de DeepSeek |
 | 10 | **Logging en archivo separado** | Los logs solo van a consola, se pierden al reiniciar | Implementar `winston` o `pino` para logs rotativos |
 | 11 | **Dashboard web de administración** | No hay UI para ver transacciones o estado del bot | Crear panel web con HTML/JS que consuma `/stats` |
 | 12 | **Límite de transacciones por día** | Un usuario podría abusar del sistema sin control | Agregar rate limiting por número (ej. 10 recargas/día) |
@@ -265,7 +265,7 @@ npm install
 npx playwright install chromium
 
 # 4. Configurar .env (ver SETUP.md para detalles)
-#    - Obtener API Key de Gemini en https://aistudio.google.com/apikey
+#    - Obtener API Key de DeepSeek en https://platform.deepseek.com/api_keys
 #    - Configurar Evolution API (token e instancia)
 
 # 5. Iniciar el servidor
@@ -278,7 +278,7 @@ node server.js
 |---|---|---|
 | `BEMOVIL_USER` | ✅ Sí | Usuario de BeMovil |
 | `BEMOVIL_PASS` | ✅ Sí | Contraseña de BeMovil |
-| `GEMINI_API_KEY` | ✅ Sí | API Key de Google Gemini (fallback a `OPENAI_API_KEY`) |
+| `GEMINI_API_KEY` | ✅ Sí | API Key de DeepSeek AI (fallback a `OPENAI_API_KEY`) |
 | `EVOLUTION_API_URL` | ✅ Sí | URL de Evolution API (default: http://localhost:8080) |
 | `EVOLUTION_API_TOKEN` | ✅ Sí | Token de autenticación de Evolution API |
 | `INSTANCE_NAME` | ✅ Sí | Nombre de la instancia en Evolution API |
@@ -365,7 +365,7 @@ Causa: Chromium no instalado
 Solución: npx playwright install chromium
 ```
 
-### Error: Gemini devuelve respuestas vacías
+### Error: DeepSeek devuelve respuestas vacías
 ```
 Causa: API Key inválida o sin créditos
 Solución: Verificar que GEMINI_API_KEY en .env sea una clave real de Google AI Studio

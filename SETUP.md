@@ -5,15 +5,15 @@
 - **Node.js** v18+ (tienes v24.12.0)
 - **Evolution API** instalada y corriendo (para conectar con WhatsApp)
 - **Cuenta en BeMovil** (recargas y pagos)
-- **API Key de Google Gemini** (para entender mensajes)
+- **API Key de DeepSeek** (para entender mensajes)
 
 ---
 
 ## ⚙️ Configuración Paso a Paso
 
-### 1️⃣ Obtener API Key de Google Gemini
+### 1️⃣ Obtener API Key de DeepSeek
 
-1. Ve a https://aistudio.google.com/apikey
+1. Ve a https://platform.deepseek.com/api_keys
 2. Inicia sesión con tu cuenta de Google
 3. Haz clic en "Create API Key"
 4. Copia la clave generada
@@ -34,7 +34,7 @@ OPENAI_API_KEY=sk-tu-api-key
 **Cambios necesarios:**
 
 1. **Evolution API:** Reemplaza `tu_token_aqui` y `tu_instancia` con tus datos reales de Evolution API
-2. **API Key:** Reemplaza `sk-tu-api-key` con la API Key de Gemini que obtuviste
+2. **API Key:** Reemplaza `sk-tu-api-key` con la API Key de DeepSeek que obtuviste
 3. **Opcional - Seguridad:** Agrega `AUTHORIZED_NUMBERS` para restringir qué números pueden usar el bot:
 
 ```
@@ -59,7 +59,7 @@ Verás algo como:
   Health:        /health
   Stats:         /stats
   Evolution API: http://localhost:8080
-  Gemini API:    OK
+  DeepSeek API:    OK
   Aut. Numbers:  Todos
 ===============================================
 ```
@@ -104,7 +104,7 @@ node scraper.js bill "CNEL" 1234567890
 
 **El servidor no inicia:**
 - Verifica que todas las dependencias estén instaladas: `npm install`
-- Verifica que la API Key de Gemini esté configurada
+- Verifica que la API Key de DeepSeek esté configurada
 
 **El scraper falla al hacer login:**
 - Verifica las credenciales de BeMovil en `.env`
