@@ -1,0 +1,35 @@
+# ============================================
+# RickTech/BeMovil Bot - .gitignore
+# ============================================
+
+# --- Variables de entorno (contienen credenciales) ---
+.env
+
+# --- Node.js ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Playwright / Chromium ---
+msedgedriver.exe
+edge-chromium*
+
+# --- Capturas de pantalla del scraper ---
+*.png
+!login_page.png
+
+# --- Logs de transacciones ---
+transactions.json
+
+# --- Archivos de sistema ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Archivos temporales ---
+*.bak
+*.tmp
+*.swp
+*.swo
+*~

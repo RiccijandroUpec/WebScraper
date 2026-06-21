@@ -1,0 +1,26 @@
+{
+  "name": "ricktech-bemovil-bot",
+  "version": "1.0.0",
+  "description": "🤖 WhatsApp Bot para recargas móviles y pago de servicios en Ecuador (BeMovil + Google Gemini + Evolution API)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node scraper.js topup \"Claro\" \"0991234567\" 1",
+    "test:bill": "node scraper.js bill \"CNEL\" \"1234567890\"",
+    "health": "curl http://localhost:3000/health",
+    "stats": "curl http://localhost:3000/stats"
+  },
+  "keywords": ["bemovil", "recargas", "whatsapp", "bot", "ecuador", "playwright", "gemini"],
+  "author": "RickTech",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@google/genai": "^2.9.0",
+    "axios": "^1.18.0",
+    "body-parser": "^2.3.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "playwright": "^1.61.0"
+  }
+}
