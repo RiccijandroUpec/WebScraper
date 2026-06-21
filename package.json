@@ -11,7 +11,15 @@
     "health": "curl http://localhost:3000/health",
     "stats": "curl http://localhost:3000/stats"
   },
-  "keywords": ["bemovil", "recargas", "whatsapp", "bot", "ecuador", "playwright", "gemini"],
+  "keywords": [
+    "bemovil",
+    "recargas",
+    "whatsapp",
+    "bot",
+    "ecuador",
+    "playwright",
+    "gemini"
+  ],
   "author": "RickTech",
   "license": "ISC",
   "type": "commonjs",
@@ -21,6 +29,7 @@
     "body-parser": "^2.3.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "mysql2": "^3.22.5",
     "playwright": "^1.61.0"
   }
 }
