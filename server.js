@@ -82,8 +82,8 @@ async function sendWhatsAppMessage(remoteJid, text) {
     const url = `${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`;
     await axios.post(url, {
       number: remoteJid,
-      options: { delay: 1200, presence: 'composing' },
-      textMessage: { text }
+      text,
+      delay: 1200
     }, {
       headers: { apikey: EVOLUTION_API_TOKEN, 'Content-Type': 'application/json' },
       timeout: 10000
@@ -99,11 +99,13 @@ async function sendImageMessage(remoteJid, imagePath, caption) {
     const fs = require('fs');
     if (!fs.existsSync(imagePath)) return;
     const base64 = fs.readFileSync(imagePath, { encoding: 'base64' });
-    const url = `${EVOLUTION_API_URL}/message/sendImage/${INSTANCE_NAME}`;
+    const url = `${EVOLUTION_API_URL}/message/sendMedia/${INSTANCE_NAME}`;
     await axios.post(url, {
       number: remoteJid,
-      options: { delay: 1200, presence: 'composing' },
-      imageMessage: { image: base64, caption: caption || '' }
+      mediatype: 'image',
+      mimetype: 'image/png',
+      media: base64,
+      caption: caption || ''
     }, {
       headers: { apikey: EVOLUTION_API_TOKEN, 'Content-Type': 'application/json' },
       timeout: 30000

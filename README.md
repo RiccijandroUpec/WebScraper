@@ -371,6 +371,76 @@ curl http://localhost:3000/stats
 
 ---
 
+## Evolution API: infraestructura compartida
+
+Los contenedores `evolution_api` y `evolution_db` **no están definidos en el `docker-compose.yml` de este proyecto**. Pertenecen a un proyecto hermano, **"sistema-kiosko"**, cuyo compose vive en:
+
+```
+C:\xampp\htdocs\sistema de kiosko impresiones\sistema-kiosko\docker-compose-evolution.yml
+```
+
+`docker-compose.yml` de webscrapper declara la red `sistema-kiosko_default` como `external: true` y el servicio `bot` se une a ella, reutilizando así la instancia de Evolution API que ya corre para el kiosko en vez de levantar una propia. Para cualquier cambio de imagen/versión/env de Evolution API hay que editar **ese otro** compose, no este.
+
+La configuración de Evolution API queda persistida en su propio Postgres (`evolution_db`), así que sobrevive a recreaciones del contenedor `evolution_api` (instancia, webhook, settings).
+
+### Bug conocido: Evolution API `:latest` + Baileys RC rompe el pairing de WhatsApp
+
+Síntoma: el QR se escanea, el celular muestra "no se puede conectar", y los logs de `evolution_api` repiten este patrón cada intento:
+
+```
+"stream errored out" (tag stream:error, code 515)
+"Pre-key upload timeout" (408)
+```
+
+Causa: la imagen `evoapicloud/evolution-api:latest` resolvía a **v2.3.7**, que trae **Baileys 7.0.0-rc.9** (release candidate con una regresión conocida — ver issue #2437 en `EvolutionAPI/evolution-api`). La versión **v2.3.6** (Baileys rc.6) no tiene este problema.
+
+Solución aplicada: en `docker-compose-evolution.yml` se fijó la imagen a `evoapicloud/evolution-api:v2.3.6` en vez de `:latest`, y se recreó el contenedor (`docker rm -f evolution_api && docker compose -f docker-compose-evolution.yml up -d evolution_api`).
+
+Nota práctica: el QR estático descargado por API (`GET /instance/connect/{instance}`) caduca en ~20-30s. Para vincular el dispositivo usar el **Manager web** (`http://localhost:8080/manager`, login con la `apikey`), que refresca el QR solo y evita falsos "no se puede conectar" por código vencido.
+
+### Formato de body correcto para enviar mensajes (Evolution API v2)
+
+`server.js` envía mensajes con el schema **v2** (flat), confirmado leyendo `/evolution/dist/validate/message.schema.*` dentro del contenedor:
+
+```js
+// Texto: POST /message/sendText/{instance}
+{ number, text, delay }
+
+// Imagen: POST /message/sendMedia/{instance} (NO existe /sendImage)
+{ number, mediatype: "image", mimetype, media /* base64 */, caption }
+```
+
+Si después de una actualización de Evolution API los envíos vuelven a fallar en silencio (o a colgarse), revisar primero si cambió el schema de body antes de asumir que es un problema de conexión.
+
+### Bug conocido: socket de WhatsApp queda "zombie" (`state: "open"` pero no llega nada)
+
+Síntoma: el bot deja de responder mensajes. `GET /instance/connectionState/{instance}` sigue devolviendo `"open"`, el webhook de la instancia está bien configurado (`http://ricktech-bot:3000/webhook`, evento `MESSAGES_UPSERT`), y la conectividad de red entre contenedores funciona — pero ningún mensaje nuevo llega al endpoint `/webhook` del bot.
+
+Cómo confirmarlo sin asumir nada: comparar la hora del mensaje de prueba con el último mensaje que Evolution API tiene realmente guardado:
+
+```bash
+curl -s -X POST -H "apikey: $EVOLUTION_API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"where":{}}' "http://localhost:8080/chat/findMessages/$INSTANCE_NAME" | head -c 500
+```
+
+Si el `messageTimestamp` más reciente es de varios minutos atrás (anterior a tus pruebas), el mensaje nunca llegó a Baileys — no es un problema del bot ni del webhook, es el socket de WhatsApp colgado.
+
+Causa: el websocket de Baileys deja de recibir eventos push de los servidores de WhatsApp aunque la conexión siga marcada como abierta (falla conocida de Baileys, no depende del código de este proyecto).
+
+Solución: `docker restart evolution_api` (~15s). La sesión/pairing no se pierde (vive en Postgres, en `evolution_db`), no hace falta volver a escanear el QR.
+
+### El bot no refleja cambios de código después de editar `server.js`
+
+El servicio `bot` en `docker-compose.yml` usa `build: .` **sin bind-mount** del código fuente (solo se monta el volumen `bot_screenshots`). Esto significa que `docker compose restart bot` o `docker restart ricktech-bot` **reinician la imagen ya compilada**, sin aplicar cambios hechos en el código local.
+
+Para que un cambio en `server.js`/`scraper.js`/`db.js` se refleje, hay que reconstruir la imagen:
+
+```bash
+docker compose up -d --build bot
+```
+
+---
+
 ## Uso desde Línea de Comandos
 
 ```bash
@@ -438,6 +508,20 @@ Solucion: Ir a https://platform.deepseek.com/top_up
 Causa: Credenciales incorrectas o cambios en el login
 Solucion: Verificar BEMOVIL_USER y BEMOVIL_PASS en .env
          Revisar login_page.png para ver el error
+```
+
+### WhatsApp no conecta / QR falla / mensajes no llegan
+```
+Ver seccion "Evolution API: infraestructura compartida" mas arriba.
+Causas mas comunes: imagen :latest con bug de Baileys RC, QR estatico vencido,
+o socket "zombie" (state=open pero Baileys no recibe nada -> reiniciar evolution_api).
+```
+
+### El bot no responde y no aparece nada en los logs ni con un log de debug agregado
+```
+Causa probable: editaste server.js pero solo hiciste restart, no rebuild.
+Solucion: docker compose up -d --build bot (ver seccion "Evolution API:
+infraestructura compartida" -> "El bot no refleja cambios de codigo").
 ```
 
 ---
