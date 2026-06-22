@@ -16,8 +16,13 @@ async function getPool() {
   }
 
   try {
+    // Auto-detectar si estamos en Docker o local
+    const fs = require('fs');
+    const inDocker = fs.existsSync('/.dockerenv');
+    const dbHost = process.env.DB_HOST || (inDocker ? 'mysql' : '127.0.0.1');
+
     pool = mysql.createPool({
-      host: process.env.DB_HOST || 'mysql',
+      host: dbHost,
       port: parseInt(process.env.DB_PORT || '3306'),
       user: process.env.DB_USER || 'ricktech_user',
       password: process.env.DB_PASSWORD || 'REDACTED_DB_PASSWORD',

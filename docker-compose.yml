@@ -2,18 +2,19 @@
 # docker-compose.yml - RickTech Ecosystem
 # ============================================
 # Uso:
-#   docker-compose up -d              # Iniciar todo
-#   docker-compose logs -f bot        # Ver logs del bot
-#   docker-compose down               # Detener todo
-#   docker-compose down -v            # Detener y borrar datos
+#   docker compose up -d
+#   docker compose logs -f bot
+#   docker compose down
 # ============================================
-
-version: '3.8'
+# NOTA: Evolution API ya existe como contenedor
+# externo (evolution_api, puerto 8080).
+# El bot se conecta a el via red compartida.
+# ============================================
 
 services:
 
   # ==========================================
-  # BASE DE DATOS (MySQL)
+  # MYSQL - Base de datos para el bot
   # ==========================================
   mysql:
     image: mysql:8.0
@@ -38,107 +39,39 @@ services:
       - ricktech_network
 
   # ==========================================
-  # EVOLUTION API (WhatsApp Gateway)
-  # ==========================================
-  evolution:
-    image: atendai/evolution-api:latest
-    container_name: ricktech-evolution
-    restart: unless-stopped
-    environment:
-      # Configuración del servidor
-      SERVER_URL: http://localhost:8080
-      PORT: 8080
-      
-      # Base de datos (usa SQLite por defecto, opcional MySQL)
-      DATABASE_ENABLED: true
-      DATABASE_PROVIDER: mysql
-      DATABASE_HOST: mysql
-      DATABASE_PORT: 3306
-      DATABASE_USER: ricktech_user
-      DATABASE_PASSWORD: REDACTED_DB_PASSWORD
-      DATABASE_NAME: ricktech
-      
-      # Autenticación
-      AUTHENTICATION_TYPE: apikey
-      AUTHENTICATION_API_KEY: evolution_api_key_2026
-      
-      # Webhook (apunta al bot)
-      WEBHOOK_URL: http://bot:3000/webhook
-      WEBHOOK_ENABLED: true
-      WEBHOOK_EVENTS: messages.upsert
-      
-      # Redis para caché (opcional, mejora rendimiento)
-      # REDIS_HOST: redis
-      # REDIS_PORT: 6379
-      
-      # Logs
-      LOG_LEVEL: info
-      LOG_COLOR: true
-    ports:
-      - "8080:8080"
-    depends_on:
-      - mysql
-    networks:
-      - ricktech_network
-
-  # ==========================================
-  # BOT RICKTECH (WebScraper + DeepSeek)
+  # BOT - WebScraper + DeepSeek AI
   # ==========================================
   bot:
     build: .
     container_name: ricktech-bot
     restart: unless-stopped
     environment:
-      # Puerto
       PORT: 3000
-      
-      # BeMovil
       BEMOVIL_USER: ${BEMOVIL_USER}
       BEMOVIL_PASS: ${BEMOVIL_PASS}
-      
-      # DeepSeek AI
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
-      
-      # Evolution API (por nombre de servicio interno)
-      EVOLUTION_API_URL: http://evolution:8080
-      EVOLUTION_API_TOKEN: evolution_api_key_2026
-      INSTANCE_NAME: ricktech
-      
-      # Base de datos (para persistencia de conversaciones)
+      EVOLUTION_API_URL: http://evolution_api:8080
+      EVOLUTION_API_TOKEN: ${EVOLUTION_API_TOKEN}
+      INSTANCE_NAME: ${INSTANCE_NAME}
       DB_HOST: mysql
       DB_PORT: 3306
       DB_USER: ricktech_user
       DB_PASSWORD: REDACTED_DB_PASSWORD
       DB_NAME: ricktech
-      
-      # Autorización
       AUTHORIZED_NUMBERS: ${AUTHORIZED_NUMBERS:-*}
     ports:
       - "3000:3000"
     volumes:
-      - bot_screenshots:/app
+      - bot_screenshots:/app/screenshots
     depends_on:
       mysql:
         condition: service_healthy
-      evolution:
-        condition: service_started
     networks:
       - ricktech_network
+      - sistema-kiosko_default
 
   # ==========================================
-  # REDIS (Opcional - para caché y sesiones)
-  # ==========================================
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: ricktech-redis
-  #   restart: unless-stopped
-  #   ports:
-  #     - "6379:6379"
-  #   networks:
-  #     - ricktech_network
-
-  # ==========================================
-  # PHPMyAdmin (Opcional - admin de BD)
+  # PHPMyAdmin - Admin web de BD (opcional)
   # ==========================================
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
@@ -157,16 +90,12 @@ services:
     networks:
       - ricktech_network
 
-# ==========================================
-# VOLUMES
-# ==========================================
 volumes:
   mysql_data:
   bot_screenshots:
 
-# ==========================================
-# NETWORKS
-# ==========================================
 networks:
   ricktech_network:
     driver: bridge
+  sistema-kiosko_default:
+    external: true

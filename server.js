@@ -40,26 +40,37 @@ setInterval(async () => {
 
 function extractMessage(body) {
   try {
+    const timestamp = body?.data?.messageTimestamp || body?.messageTimestamp || null;
     if (body?.data?.message?.conversation) {
-      return { remoteJid: body.data.key.remoteJid, fromMe: body.data.key.fromMe, text: body.data.message.conversation };
+      return { remoteJid: body.data.key.remoteJid, fromMe: body.data.key.fromMe, text: body.data.message.conversation, timestamp };
     }
     if (body?.data?.message?.extendedTextMessage?.text) {
-      return { remoteJid: body.data.key.remoteJid, fromMe: body.data.key.fromMe, text: body.data.message.extendedTextMessage.text };
+      return { remoteJid: body.data.key.remoteJid, fromMe: body.data.key.fromMe, text: body.data.message.extendedTextMessage.text, timestamp };
     }
     if (body?.data?.message?.imageMessage?.caption) {
-      return { remoteJid: body.data.key.remoteJid, fromMe: body.data.key.fromMe, text: body.data.message.imageMessage.caption };
+      return { remoteJid: body.data.key.remoteJid, fromMe: body.data.key.fromMe, text: body.data.message.imageMessage.caption, timestamp };
     }
     if (body?.message?.conversation) {
-      return { remoteJid: body.key?.remoteJid || body.from, fromMe: body.key?.fromMe || false, text: body.message.conversation };
+      return { remoteJid: body.key?.remoteJid || body.from, fromMe: body.key?.fromMe || false, text: body.message.conversation, timestamp };
     }
     if (body?.message?.extendedTextMessage?.text) {
-      return { remoteJid: body.key?.remoteJid || body.from, fromMe: body.key?.fromMe || false, text: body.message.extendedTextMessage.text };
+      return { remoteJid: body.key?.remoteJid || body.from, fromMe: body.key?.fromMe || false, text: body.message.extendedTextMessage.text, timestamp };
     }
     return null;
   } catch (err) {
     console.error('[WEBHOOK] Error:', err.message);
     return null;
   }
+}
+
+// Ignora mensajes recibidos con retraso (reconexiones, reinicios en desarrollo)
+// para que el bot no conteste mensajes viejos como si fueran nuevos.
+const MAX_MESSAGE_AGE_MS = 2 * 60 * 1000;
+
+function isStaleMessage(timestamp) {
+  if (!timestamp) return false;
+  const ms = Number(timestamp) * (Number(timestamp) < 1e12 ? 1000 : 1);
+  return Date.now() - ms > MAX_MESSAGE_AGE_MS;
 }
 
 // ============================================
@@ -191,8 +202,12 @@ app.post('/webhook', async (req, res) => {
   try {
     const extracted = extractMessage(req.body);
     if (!extracted) return;
-    const { remoteJid, fromMe, text: message } = extracted;
+    const { remoteJid, fromMe, text: message, timestamp } = extracted;
     if (fromMe) return;
+    if (isStaleMessage(timestamp)) {
+      console.log(`[WEBHOOK] Ignorado (mensaje viejo) ${remoteJid}: "${message}"`);
+      return;
+    }
 
     console.log(`[WEBHOOK] ${remoteJid}: "${message}"`);
 
