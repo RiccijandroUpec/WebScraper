@@ -298,7 +298,7 @@ Verás:
 
 ```env
 # === CREDENCIALES BEMOVIL ===
-BEMOVIL_USER=REDACTED_USER
+BEMOVIL_USER=tu_usuario_bemovil
 BEMOVIL_PASS=tu_contraseña
 
 # === DEEPSEEK AI (para analizar mensajes) ===

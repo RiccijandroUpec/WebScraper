@@ -23,8 +23,8 @@
 Tu archivo `.env` actual tiene esto:
 
 ```
-BEMOVIL_USER=REDACTED_USER
-BEMOVIL_PASS=REDACTED_PASSWORD
+BEMOVIL_USER=tu_usuario_bemovil
+BEMOVIL_PASS=tu_password_bemovil
 EVOLUTION_API_URL=http://localhost:8080
 EVOLUTION_API_TOKEN=tu_token_aqui
 INSTANCE_NAME=tu_instancia

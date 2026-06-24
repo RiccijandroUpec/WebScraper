@@ -21,10 +21,10 @@ services:
     container_name: ricktech-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: REDACTED_DB_ROOT_PASSWORD
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ricktech
       MYSQL_USER: ricktech_user
-      MYSQL_PASSWORD: REDACTED_DB_PASSWORD
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -45,6 +45,7 @@ services:
     build: .
     container_name: ricktech-bot
     restart: unless-stopped
+    shm_size: '1gb'
     environment:
       PORT: 3000
       BEMOVIL_USER: ${BEMOVIL_USER}
@@ -56,9 +57,10 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       DB_USER: ricktech_user
-      DB_PASSWORD: REDACTED_DB_PASSWORD
+      DB_PASSWORD: ${MYSQL_PASSWORD}
       DB_NAME: ricktech
       AUTHORIZED_NUMBERS: ${AUTHORIZED_NUMBERS:-*}
+      PAYMENT_PIN: ${PAYMENT_PIN}
     ports:
       - "3000:3000"
     volumes:
@@ -81,7 +83,7 @@ services:
       PMA_HOST: mysql
       PMA_PORT: 3306
       PMA_USER: ricktech_user
-      PMA_PASSWORD: REDACTED_DB_PASSWORD
+      PMA_PASSWORD: ${MYSQL_PASSWORD}
       UPLOAD_LIMIT: 100M
     ports:
       - "8081:80"

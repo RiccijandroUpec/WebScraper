@@ -25,7 +25,7 @@ async function getPool() {
       host: dbHost,
       port: parseInt(process.env.DB_PORT || '3306'),
       user: process.env.DB_USER || 'ricktech_user',
-      password: process.env.DB_PASSWORD || 'REDACTED_DB_PASSWORD',
+      password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME || 'ricktech',
       waitForConnections: true,
       connectionLimit: 10,
