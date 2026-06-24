@@ -5,6 +5,9 @@
 # --- Variables de entorno (contienen credenciales) ---
 .env
 
+# --- Sesión guardada de bemovil (cookies/JWT) ---
+.bemovil-session.json
+
 # --- Node.js ---
 node_modules/
 npm-debug.log*

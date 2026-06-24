@@ -24,6 +24,8 @@ RUN apt-get update && apt-get install -y \
     libxdamage1 \
     libxrandr2 \
     xdg-utils \
+    xvfb \
+    xauth \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
@@ -46,4 +48,6 @@ COPY . .
 EXPOSE 3000
 
 # Comando por defecto
-CMD ["node", "server.js"]
+# xvfb-run crea una pantalla virtual: Playwright lanza Chromium con headless:false
+# (necesario porque bemovil bloquea con HTTP 400 cuando detecta Chromium headless)
+CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1366x900x24", "node", "server.js"]

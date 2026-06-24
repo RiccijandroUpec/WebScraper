@@ -134,8 +134,11 @@ async function analyzeIntent(userMessage, context) {
     'Combina datos nuevos con contexto.',
     'RESPUESTA: SOLO JSON. NADA MAS.',
     '',
-    'OPERADORAS: Claro, Movistar, CNT, Tuenti, OpenMobile',
-    'SERVICIOS: CNEL, CNT, ETAPA, Agua Quito, M. Guayaquil, Reg. Civil',
+    'OPERADORAS DE RECARGA (únicas válidas en bemovil): Claro, Movistar, Tuenti, CNT, Akimovil, Maxiplus.',
+    'SERVICIOS DE PAGO: bemovil tiene CIENTOS de servicios (agua/luz por municipio, bancos, SRI, registros, transito, etc).',
+    'NO restrinjas "service" a una lista fija: toma el nombre TAL CUAL lo escribe el usuario, usando el nombre MAS COMPLETO posible',
+    '(ej. usuario dice "CNEL" -> pide que aclare cuál regional, ej. "CNEL Guayaquil"; "registro civil" -> usa "Registro Civil" completo, no abreviar "Reg. Civil").',
+    'Si bemovil no encuentra el servicio exacto al procesarlo, el sistema avisará con un error pidiendo el nombre completo.',
     '',
     'JSON: {"intent":"topup"|"bill"|"unknown"|"greeting", "is_complete":bool, "reply_message":"texto", "topup_data":{"operator":"nombre|null","phone":"10dig|null","amount":"numero|null"}, "bill_data":{"service":"nombre|null","reference":"numero|null"}, "missing_fields":["campos"]}',
     '',
@@ -223,6 +226,14 @@ app.post('/webhook', async (req, res) => {
     }
 
     const context = await getContext(remoteJid);
+
+    // Si hay una acción de dinero real esperando confirmación, este mensaje
+    // SOLO puede ser el PIN o una cancelación — no se vuelve a llamar a la IA.
+    if (context.pendingConfirmation) {
+      await handlePendingConfirmation(remoteJid, message.trim(), context);
+      return;
+    }
+
     const aiResponse = await analyzeIntent(message, context);
     if (!aiResponse) {
       await sendWhatsAppMessage(remoteJid, '⚠️ Error interno. Intenta de nuevo.');
@@ -249,48 +260,119 @@ app.post('/webhook', async (req, res) => {
 
     await sendWhatsAppMessage(remoteJid, aiResponse.reply_message);
 
-    // Ejecutar scraper si completo
-    if (aiResponse.is_complete) {
-      if (aiResponse.intent === 'topup' && aiResponse.topup_data) {
-        const { operator, phone, amount } = aiResponse.topup_data;
-        console.log(`[SCRAPER] Recarga ${operator} ${phone} $${amount}`);
-        await sendWhatsAppMessage(remoteJid, `⏳ Procesando recarga de *$${amount}* a *${operator}*...`);
-        await db.saveTransaction({ type: 'topup', operator, phone, amount, remoteJid, status: 'pending' }).catch(() => {});
+    if (!aiResponse.is_complete) return;
 
-        const result = await scraper.sellTopup(operator, phone, amount);
-        if (result?.success) {
-          await sendWhatsAppMessage(remoteJid, `✅ Recarga exitosa!\n📱 ${operator}\n📞 ${phone}\n💰 $${amount}\n\nGracias 😊`);
-          await db.saveTransaction({ type: 'topup', operator, phone, amount, remoteJid, status: 'success' }).catch(() => {});
-          await db.incrementDailyCount(remoteJid).catch(() => {});
-        } else {
-          await sendWhatsAppMessage(remoteJid, `❌ Error: ${result?.error || 'desconocido'}. Intenta de nuevo.`);
-          await db.saveTransaction({ type: 'topup', operator, phone, amount, remoteJid, status: 'error', error: result?.error }).catch(() => {});
-        }
+    if (aiResponse.intent === 'topup' && aiResponse.topup_data) {
+      const { operator, phone, amount } = aiResponse.topup_data;
+      // Las recargas no tienen un paso previo de "consultar monto": el monto
+      // ya lo dio el usuario, así que pedimos el PIN directamente sobre eso.
+      await requestPinConfirmation(remoteJid, {
+        type: 'topup',
+        data: { operator, phone, amount },
+        summary: `📱 Recarga de *$${amount}* a *${operator}* (${phone})`
+      });
+
+    } else if (aiResponse.intent === 'bill' && aiResponse.bill_data) {
+      const { service, reference } = aiResponse.bill_data;
+      console.log(`[SCRAPER] Consultando ${service} Ref ${reference}`);
+      await sendWhatsAppMessage(remoteJid, `⏳ Consultando *${service}*...`);
+
+      const result = await scraper.payBill(service, reference);
+      if (!result?.success) {
+        await sendWhatsAppMessage(remoteJid, `❌ Error: ${result?.error || 'desconocido'}. Verifica datos.`);
+        await db.saveTransaction({ type: 'bill', service, reference, remoteJid, status: 'error', error: result?.error }).catch(() => {});
         await deleteContext(remoteJid);
-
-      } else if (aiResponse.intent === 'bill' && aiResponse.bill_data) {
-        const { service, reference } = aiResponse.bill_data;
-        console.log(`[SCRAPER] Servicio ${service} Ref ${reference}`);
-        await sendWhatsAppMessage(remoteJid, `⏳ Consultando *${service}*...`);
-        await db.saveTransaction({ type: 'bill', service, reference, remoteJid, status: 'pending' }).catch(() => {});
-
-        const result = await scraper.payBill(service, reference);
-        if (result?.success) {
-          await sendWhatsAppMessage(remoteJid, `✅ Consulta completada!\n📋 ${service}\n🔢 ${reference}\n\nGracias 😊`);
-          await sendImageMessage(remoteJid, path.join(__dirname, 'recaudo_resultado.png'), `Resultado ${service}`).catch(() => {});
-          await db.saveTransaction({ type: 'bill', service, reference, remoteJid, status: 'success' }).catch(() => {});
-          await db.incrementDailyCount(remoteJid).catch(() => {});
-        } else {
-          await sendWhatsAppMessage(remoteJid, `❌ Error: ${result?.error || 'desconocido'}. Verifica datos.`);
-          await db.saveTransaction({ type: 'bill', service, reference, remoteJid, status: 'error', error: result?.error }).catch(() => {});
-        }
-        await deleteContext(remoteJid);
+        return;
       }
+
+      // La consulta encontró algo para pagar; el pago real solo se hace tras
+      // confirmar con PIN (puede ser dinero de terceros, ej. factura de SRI).
+      await requestPinConfirmation(remoteJid, {
+        type: 'bill',
+        data: { service, reference },
+        summary: `📋 *${service}* (ref. ${reference})\n${(result.details || '').substring(0, 400)}`
+      });
     }
   } catch (err) {
     console.error('[WEBHOOK] Error:', err.message);
   }
 });
+
+// ============================================
+// CONFIRMACIÓN CON PIN (antes de mover dinero real)
+// ============================================
+
+const PAYMENT_PIN = process.env.PAYMENT_PIN || null;
+if (!PAYMENT_PIN) {
+  console.warn('[PIN] ⚠️  PAYMENT_PIN no está configurado: las recargas y pagos se ejecutarán SIN pedir confirmación.');
+}
+
+async function requestPinConfirmation(remoteJid, pending) {
+  if (!PAYMENT_PIN) {
+    // Sin PIN configurado, no hay forma de confirmar: ejecutar directo (comportamiento previo).
+    await executeConfirmedAction(remoteJid, pending);
+    return;
+  }
+  await saveContext(remoteJid, { pendingConfirmation: pending });
+  await sendWhatsAppMessage(
+    remoteJid,
+    `${pending.summary}\n\n🔐 Responde con el *PIN* para confirmar y procesar el pago, o escribe *cancelar*.`
+  );
+}
+
+async function handlePendingConfirmation(remoteJid, text, context) {
+  const pending = context.pendingConfirmation;
+
+  if (text.toLowerCase() === 'cancelar') {
+    await sendWhatsAppMessage(remoteJid, '🚫 Operación cancelada.');
+    await deleteContext(remoteJid);
+    return;
+  }
+
+  if (text !== PAYMENT_PIN) {
+    await sendWhatsAppMessage(remoteJid, '❌ PIN incorrecto. Responde con el PIN correcto o escribe *cancelar*.');
+    return;
+  }
+
+  await executeConfirmedAction(remoteJid, pending);
+  await deleteContext(remoteJid);
+}
+
+async function executeConfirmedAction(remoteJid, pending) {
+  if (pending.type === 'topup') {
+    const { operator, phone, amount } = pending.data;
+    console.log(`[SCRAPER] Recarga confirmada ${operator} ${phone} $${amount}`);
+    await sendWhatsAppMessage(remoteJid, `⏳ Procesando recarga de *$${amount}* a *${operator}*...`);
+    await db.saveTransaction({ type: 'topup', operator, phone, amount, remoteJid, status: 'pending' }).catch(() => {});
+
+    const result = await scraper.sellTopup(operator, phone, amount);
+    if (result?.success) {
+      await sendWhatsAppMessage(remoteJid, `✅ Recarga exitosa!\n📱 ${operator}\n📞 ${phone}\n💰 $${amount}\n\nGracias 😊`);
+      await db.saveTransaction({ type: 'topup', operator, phone, amount, remoteJid, status: 'success' }).catch(() => {});
+      await db.incrementDailyCount(remoteJid).catch(() => {});
+    } else {
+      await sendWhatsAppMessage(remoteJid, `❌ Error: ${result?.error || 'desconocido'}. Intenta de nuevo.`);
+      await db.saveTransaction({ type: 'topup', operator, phone, amount, remoteJid, status: 'error', error: result?.error }).catch(() => {});
+    }
+
+  } else if (pending.type === 'bill') {
+    const { service, reference } = pending.data;
+    console.log(`[SCRAPER] Pago confirmado ${service} Ref ${reference}`);
+    await sendWhatsAppMessage(remoteJid, `⏳ Procesando pago de *${service}*...`);
+    await db.saveTransaction({ type: 'bill', service, reference, remoteJid, status: 'pending' }).catch(() => {});
+
+    const result = await scraper.payBill(service, reference, { confirm: true });
+    if (result?.success) {
+      await sendWhatsAppMessage(remoteJid, `✅ Pago realizado!\n📋 ${service}\n🔢 ${reference}\n\nGracias 😊`);
+      await sendImageMessage(remoteJid, path.join(__dirname, 'recaudo_resultado.png'), `Resultado ${service}`).catch(() => {});
+      await db.saveTransaction({ type: 'bill', service, reference, remoteJid, status: 'success' }).catch(() => {});
+      await db.incrementDailyCount(remoteJid).catch(() => {});
+    } else {
+      await sendWhatsAppMessage(remoteJid, `❌ Error: ${result?.error || 'desconocido'}. Verifica datos.`);
+      await db.saveTransaction({ type: 'bill', service, reference, remoteJid, status: 'error', error: result?.error }).catch(() => {});
+    }
+  }
+}
 
 // ============================================
 // HEALTH

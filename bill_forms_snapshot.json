@@ -1,0 +1,139 @@
+{
+  "Agua - EPMAPS Quito en Linea": {
+    "heading": "Realizar venta",
+    "inputs": [
+      {
+        "type": "text",
+        "id": "a3hdf",
+        "label": "Nro Cuenta / Contrato"
+      }
+    ],
+    "buttons": [
+      "Consultar"
+    ]
+  },
+  "SRI Pago Matricula": {
+    "heading": "Realizar venta",
+    "inputs": [
+      {
+        "type": "text",
+        "id": "ugtly",
+        "label": "Placa/RAMV"
+      }
+    ],
+    "buttons": [
+      "Consultar"
+    ]
+  },
+  "CNT Telefonia Movil": {
+    "heading": "Realizar venta",
+    "inputs": [
+      {
+        "type": "text",
+        "id": "53pan",
+        "label": "Nro Cuenta / Contrato"
+      }
+    ],
+    "buttons": [
+      "Consultar"
+    ]
+  },
+  "AGUA - AGUAPEN": {
+    "heading": "Realizar recaudo",
+    "inputs": [
+      {
+        "type": "text",
+        "id": "0a63j",
+        "label": "Suministro"
+      }
+    ],
+    "buttons": [
+      "Realizar consulta"
+    ]
+  },
+  "AGUA LATACUNGA": {
+    "heading": "Realizar recaudo",
+    "inputs": [
+      {
+        "type": "text",
+        "id": "9c351",
+        "label": "CLAVE/CEDULA/RUC - P"
+      }
+    ],
+    "buttons": [
+      "Realizar consulta"
+    ]
+  },
+  "Netflix Colombia": {
+    "heading": "",
+    "inputs": [],
+    "buttons": []
+  },
+  "Pin Freefire": {
+    "heading": "Realizar venta",
+    "inputs": [
+      {
+        "type": "text",
+        "id": "j3ydz",
+        "label": "Correo Electrónico"
+      }
+    ],
+    "buttons": [
+      "Vender paquete"
+    ]
+  },
+  "Banco Solidario Deposito": {
+    "heading": "Realizar depósito",
+    "inputs": [
+      {
+        "type": "text",
+        "id": "dpavb",
+        "label": "Número de Cuenta"
+      },
+      {
+        "type": "tel",
+        "id": "bx6qu",
+        "label": "Valor a depositar"
+      }
+    ],
+    "buttons": [
+      "Procesar"
+    ]
+  },
+  "Lotto": {
+    "heading": "Realizar venta",
+    "inputs": [
+      {
+        "type": "text",
+        "id": "ymn8b",
+        "label": "Cédula"
+      },
+      {
+        "type": "text",
+        "id": "f1rzyh",
+        "label": "Cábala"
+      }
+    ],
+    "buttons": [
+      "Consultar"
+    ]
+  },
+  "Astrobet Recarga": {
+    "heading": "Realizar venta",
+    "inputs": [
+      {
+        "type": "text",
+        "id": "kaee2g",
+        "label": "Documento Jugador"
+      },
+      {
+        "type": "tel",
+        "id": "9eofnl",
+        "label": "Valor"
+      }
+    ],
+    "buttons": [
+      "Cargar"
+    ]
+  }
+}
