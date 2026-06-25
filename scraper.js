@@ -482,7 +482,10 @@ async function processOrder(productQuery, opts = {}) {
             const skip = /cancelar|atr[aá]s|volver/i;
             const btn = Array.from(document.querySelectorAll('button')).find(b => {
                 const t = (b.innerText || '').trim();
-                return t && !skip.test(t) && b.offsetParent !== null;
+                // Descartar botones sin texto real (ej. numpads de combinaciones
+                // de lotería como Pega2/3/4: dígitos sueltos "0".."9" que no son
+                // el botón de acción real) — exigir al menos 2 letras.
+                return t && !skip.test(t) && b.offsetParent !== null && /[a-zA-Záéíóúñ]{2,}/.test(t);
             });
             return btn ? btn.innerText.trim() : null;
         });

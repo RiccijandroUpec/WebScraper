@@ -1,0 +1,1368 @@
+{
+  "Paquetes": {
+    "Paqueclaro": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 14,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Paquemaxi": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 9,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Paqueaki": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 8,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Paquecnt": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 10,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Paquetuenti": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 7,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Paquemovistar": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 8,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    }
+  },
+  "Entrenimiento": {
+    "Pin fortnite": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 2,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Bingo Yala": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Referencia de pago"
+      ],
+      "actionButton": "Pagar",
+      "error": null
+    },
+    "Pin Freefire": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 4,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Mobile legends BB": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Referencia de pago"
+      ],
+      "actionButton": "Pagar",
+      "error": null
+    },
+    "Payvalida": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Referencia de pago"
+      ],
+      "actionButton": "Pagar",
+      "error": null
+    },
+    "Pin Nintendo": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 3,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Pin Itunes": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 3,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Pin roblox": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 4,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Black Clover": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Referencia de pago"
+      ],
+      "actionButton": "Pagar",
+      "error": null
+    },
+    "Softnyx": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Referencia de pago"
+      ],
+      "actionButton": "Pagar",
+      "error": null
+    },
+    "Pin PlayStation": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 4,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "FreeFire": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Referencia de pago"
+      ],
+      "actionButton": "Pagar",
+      "error": null
+    }
+  },
+  "Depósitos": {
+    "Banco Solidario Deposito": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Número de Cuenta",
+        "Valor a depositar"
+      ],
+      "actionButton": "Procesar",
+      "error": null
+    },
+    "Banco Procredit": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Valor a depositar"
+      ],
+      "actionButton": "Procesar",
+      "error": null
+    },
+    "Banco Loja": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Valor a depositar"
+      ],
+      "actionButton": "Procesar",
+      "error": null
+    },
+    "Banco Bgr": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Valor a depositar"
+      ],
+      "actionButton": "Procesar",
+      "error": null
+    },
+    "Banco Produbanco": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Valor"
+      ],
+      "actionButton": "Procesar",
+      "error": null
+    },
+    "Coop Atuntaqui": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Valor a depositar"
+      ],
+      "actionButton": "Procesar",
+      "error": null
+    },
+    "Mutualista Pichincha": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Valor"
+      ],
+      "actionButton": "Procesar",
+      "error": null
+    },
+    "Coop Oscus": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Valor a depositar"
+      ],
+      "actionButton": "Procesar",
+      "error": null
+    },
+    "Coop Alianza Valle": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Valor"
+      ],
+      "actionButton": "Procesar",
+      "error": null
+    },
+    "Coop Andalucia": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Valor"
+      ],
+      "actionButton": "Procesar",
+      "error": null
+    }
+  },
+  "Tv Digital": {
+    "Cuenta Disney+": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 2,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "DirecTV": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Referencia",
+        "Valor"
+      ],
+      "actionButton": "Cargar",
+      "error": null
+    },
+    "CNTTV": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Número de tarjeta",
+        "Valor"
+      ],
+      "actionButton": "Cargar",
+      "error": null
+    },
+    "Cuenta Netflix": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 2,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Cuenta Crunchyroll": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 5,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Cuenta Paramount": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 1,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Cuenta Hbo": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 2,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Cuenta MosherTV": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 2,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    }
+  },
+  "Internacionales": {
+    "Netflix Colombia": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 5,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "PaqueMovistar Colombia": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 4,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "PaqueClaro Colombia": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 4,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "DirecTV Colombia": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 3,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Tigo Colombia": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 4,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Movistar Colombia": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 4,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Claro Colombia": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 4,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Movistar Venezuela": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 3,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "Movilnet Venezuela": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 3,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    },
+    "PaqueTigo Colombia": {
+      "success": false,
+      "needsTierChoice": true,
+      "tierCount": 3,
+      "requiredFields": null,
+      "actionButton": null,
+      "error": "Hay varias opciones disponibles, falta elegir cuál."
+    }
+  },
+  "Lotería": {
+    "Lotto": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Cédula",
+        "Cábala"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "Loteria": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Cédula",
+        "Cábala"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "Pozo": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Cédula"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "Pega4": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Valor por combinación"
+      ],
+      "actionButton": "Agregar combinación",
+      "error": null,
+      "note": "Flujo multi-paso (selector de combinaciones numéricas), no un formulario simple. 'Agregar combinación' es un paso intermedio, no el envío final. No soportado completamente por processOrder todavía."
+    },
+    "Pega2": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Valor por combinación"
+      ],
+      "actionButton": "Agregar combinación",
+      "error": null,
+      "note": "Mismo caso que Pega4."
+    },
+    "Pega3": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Valor por combinación"
+      ],
+      "actionButton": "Agregar combinación",
+      "error": null,
+      "note": "Mismo caso que Pega4."
+    }
+  },
+  "Retiros": {
+    "Banco Solidario Avance TC Pago": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Número de Tarjeta",
+        "Valor"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "Banco Solidario Retiro Pago": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Número de Cuenta",
+        "Valor"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    }
+  },
+  "Pronósticos": {
+    "Astrobet Pago": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Documento Jugador",
+        "Clave de Orden"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "Astrobet Recarga": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Documento Jugador",
+        "Valor"
+      ],
+      "actionButton": "Cargar",
+      "error": null
+    },
+    "Bet593 Pago": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Documento Jugador",
+        "Código de retiro"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "Bet593 Recarga": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Documento de identidad",
+        "Valor"
+      ],
+      "actionButton": "Cargar",
+      "error": null
+    },
+    "Prontopaga Pago": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Documento de identidad",
+        "Código de retiro",
+        "Clave"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "Prontopaga Recarga": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Orden Pago"
+      ],
+      "actionButton": "Pagar",
+      "error": null
+    },
+    "Sportbet Recarga": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Orden Pago Seguro"
+      ],
+      "actionButton": "Cargar",
+      "error": null
+    },
+    "Databet Pago": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Documento Jugador",
+        "N. de Orden",
+        "Clave"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "Databet Recarga": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Documento de identidad",
+        "Valor"
+      ],
+      "actionButton": "Cargar",
+      "error": null
+    },
+    "Doradobet Recarga": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Id Jugador",
+        "Valor"
+      ],
+      "actionButton": "Cargar",
+      "error": null
+    },
+    "Betcris Pago": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Código de retiro"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "Betcris Recarga": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Id Jugador",
+        "Valor"
+      ],
+      "actionButton": "Cargar",
+      "error": null
+    },
+    "Ecuabet Recarga": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [],
+      "actionButton": "Comenzar",
+      "error": null,
+      "note": "El nombre original en el catálogo tenía un salto de línea corrupto ('Ecuabet Recarga\\necuabet') de un escaneo anterior; con el nombre correcto sí se encuentra. 'Comenzar' sugiere otro flujo multi-paso."
+    }
+  },
+  "Otros Recaudos": {
+    "Agua - EPMAPS Quito en Linea": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Nro Cuenta / Contrato"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "Luz - EEQSA Quito en Linea": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Nro Cuenta / Contrato"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "Internet Alfanet": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Identificación"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "SRI Transferencia de Dominio": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Placa"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "SRI Pago Matricula": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Placa/RAMV"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "SRI Ajustes Vehiculares": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Placa"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "SRI Declaraciones": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Número de serie"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "CNT Telefonia Fija/Internet/TV": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Nro Cuenta / Contrato"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "CNT Telefonia Movil": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Nro Cuenta / Contrato"
+      ],
+      "actionButton": "Consultar",
+      "error": null
+    },
+    "PayCash": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Referencia de pago"
+      ],
+      "actionButton": "Pagar",
+      "error": null
+    }
+  },
+  "Servipagos": {
+    "AGUA - AGUAPEN": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Suministro"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - AGUAS DE CHUNO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Identificacion"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - AGUAS DE JIPIJAPA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Identificacion"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - AGUAS DE MACHALA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Identificación"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - AGUAS EMMAP-EP": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Cedula",
+        "Suministro"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - EMAPA AMBATO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Contrapartida"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - EMAPA DAULE": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Identificacion"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - EMAPA OTAVALO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Número Cuenta"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - EMAPA-I IBARRA EN LINEA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Suministro"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - EMPRESA PUBLICA DEL AGUA EPA EP": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Codigo/identificacion"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - EMPRESA PUBLICA-EMAPAD EP DURAN": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Contrapartida",
+        "Nombre Cliente",
+        "Cédula Cliente"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - EPAM MANTA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Suministro"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - EPMAPAQ QUEVEDO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Cedula"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - EPMAPA-SD STO DOMINGO EN LINEA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Suministro"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - EPMAPSE ESMERALDAS": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Número Cuenta"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - FACTURAS DE VENTA AMAGUA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Código Documento"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - INTERAGUA EN LINEA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Suministro"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - INTERAGUA TASA RECOLECCION BASURA LINEA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Suministro"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "TRANSITO - MOVILIDAD DE YAGUACHI": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Contrapartida"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - PORTOAGUAS EPMAPAP": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Cod/identificacion"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - AMAGUA LINEA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Suministro"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - EPMAPS EN LINEA- AGUA QUITO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Número Suministro"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA - MILAGRO - EPAMIL": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Número Cuenta"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "CREDITO - BANCO AMIBANK PAW COBRANZA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Contrapartida",
+        "Cedula Cliente"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "CREDITO - BANCO CODESARROLLO ABONOS CREDITO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Identificación"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "CREDITO - BANCO COMERCIAL MANABI PAW COBRANZA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Identificacion Cartera",
+        "Nombre Depositante",
+        "C.i./ruc/pasaporte"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "CREDITO - BANCO ATLANTIDA COBRANZA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Contrapartida",
+        "Nombre Cliente",
+        "Cédula Cliente"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "CREDITO - BANCO DE LOJA PAW COBRANZA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Contrapartida"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "CREDITO - BANCO PROCREDIT S.A. PAW COBRANZA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Número Identificación",
+        "Nombre Depositante",
+        "Ident. Depositante"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "CREDITO - COBRANZA MUTUALISTA IMBABURA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "Identificación"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    }
+  },
+  "Ser. Básicos": {
+    "AGUA LATACUNGA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CLAVE/CEDULA/RUC - P"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA PORTOVIEJO - PORTOAGUAS": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO DE CUENTA - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA TULCAN - EPMAPA-T": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CUENTA - P"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA AGUAPEN - STA. ELENA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO DE CUENTA - T"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA MACHALA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO DE CUENTA - P"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA AMAGUA - SAMBORONDON": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO INMUEBLE - T"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA ANTONIO ANTE": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO DE CLAVE / CEDULA / RUC - P"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA ARENILLAS": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO DE CUENTA - P"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA BUENA FE - EMAPSA BF": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CUENTA - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA CAYAMBE": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO DE CUENTA - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA COTACACHI": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CUENTA/CEDULA/RUC - P"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMAPA - AMBATO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CUENTA/CEDULA/RUC - P"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMAPA - AZOGUES": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CEDULA/RUC - P"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMAPA - IBARRA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CUENTA - T"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMAPA - MEJIA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "SUMINISTRO - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMAPA DAULE": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CUENTA - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMAPA LAGO AGRIO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CUENTA/CEDULA/RUC - P"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMAPAD-EP - DURAN CONSUMO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CUENTA/CEDULA/RUC - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMAPAD-EP - DURAN SERVICIO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO SOLICITUD - T"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMAPAG-GUARANDA": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CUENTA/CEDULA/RUC - P"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMAPSE - ESMERALDAS. ATACAMES. RIO VERDE": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO DE CUENTA - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMASA PEDRO MONCAYO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO DE CUENTA - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMSABA E.P. - BABAHOYO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "SUMINISTRO/CEDULA/RUC - P"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EMSABA E.P. - SOLICITUDES": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "SUMINISTRO/CEDULA/RUC - P"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EPAM - MANTA - CONTRATO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CONTRATO/CEDULA/RUC - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EPAM - MANTA - CUPON": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CONTRATO/CEDULA/RUC - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EPMAPA PEDERNALES": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO DE CUENTA / CEDULA - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EPMAPA SANTO DOMINGO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO DE CUENTA - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA EPMAPS - QUITO": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "NUMERO DE CUENTA - T"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    },
+    "AGUA HIDROPLAYAS": {
+      "success": true,
+      "needsTierChoice": false,
+      "tierCount": 0,
+      "requiredFields": [
+        "CODIGO COMERCIAL/CEDULA/RUC - A"
+      ],
+      "actionButton": "Realizar consulta",
+      "error": null
+    }
+  }
+}
