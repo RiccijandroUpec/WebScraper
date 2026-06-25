@@ -1,6 +1,6 @@
 # 🤖 RickTech/BeMovil — WhatsApp Bot para Recargas y Pagos
 
-**Sistema automatizado** que conecta WhatsApp con la plataforma [BeMovil](https://bemovil.net) para realizar **recargas móviles** y **pago de servicios** en Ecuador usando **Inteligencia Artificial (DeepSeek)**, **Playwright** y **Evolution API**.
+**Sistema automatizado** que conecta WhatsApp con la plataforma [BeMovil](https://bemovil.net) para realizar **recargas móviles**, **pago de servicios** y **cualquier otro producto que venda BeMovil** (streaming, paquetes de datos, depósitos, apuestas, lotería, etc.) en Ecuador, usando **DeepSeek AI**, **Playwright** y **Evolution API**.
 
 ---
 
@@ -8,15 +8,19 @@
 
 - [Estado del Proyecto](#estado-del-proyecto)
 - [Arquitectura Técnica](#arquitectura-técnica)
+- [Los 3 Intents: topup / bill / order](#los-3-intents-topup--bill--order)
+- [Confirmación de pago: código por pedido vía administrador](#confirmación-de-pago-código-por-pedido-vía-administrador)
+- [BeMovil: anti-bot y selectores reales](#bemovil-anti-bot-y-selectores-reales)
 - [Tecnologías y Herramientas Usadas](#tecnologías-y-herramientas-usadas)
-- [Flujo de Funcionamiento](#flujo-de-funcionamiento)
 - [Lo que se Implementó ✅](#lo-que-se-implementó-)
-- [Lo que Falta Implementar ❌](#lo-que-falta-implementar-)
+- [Lo que Falta / Limitaciones Conocidas ⚠️](#lo-que-falta--limitaciones-conocidas-️)
 - [Estructura del Proyecto](#estructura-del-proyecto)
 - [Instalación y Configuración](#instalación-y-configuración)
 - [Variables de Entorno](#variables-de-entorno)
+- [Docker](#docker)
 - [Endpoints de la API](#endpoints-de-la-api)
 - [Uso desde Línea de Comandos](#uso-desde-línea-de-comandos)
+- [Evolution API: infraestructura compartida](#evolution-api-infraestructura-compartida)
 - [Solución de Problemas](#solución-de-problemas)
 
 ---
@@ -24,10 +28,15 @@
 ## Estado del Proyecto
 
 ```
-🚀 FUNCIONAL — El bot arranca, recibe mensajes, analiza con DeepSeek AI,
-           ejecuta el scraper y responde por WhatsApp.
-⚠️  PENDIENTE: Selectores del DOM de BeMovil requieren ajuste manual
-           y Evolution API debe estar configurada.
+🚀 FUNCIONAL DE EXTREMO A EXTREMO (hasta el paso de confirmación).
+   Login real verificado, anti-bot superado, recargas y consulta de
+   servicios probadas con datos reales, y el descubrimiento automático
+   de formularios (processOrder) verificado contra TODO el catálogo
+   de BeMovil (136 productos, ver dryrun_results.json).
+
+⚠️  NUNCA se completó un pago/recarga real de principio a fin con
+   confirm:true (todas las pruebas reales fueron de rechazo controlado:
+   saldo insuficiente, referencia inválida). Ver "Limitaciones Conocidas".
 ```
 
 ---
@@ -36,10 +45,10 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    USUARIO FINAL                             │
+│                    USUARIO FINAL (cliente)                   │
 │              (WhatsApp en su celular)                        │
 └─────────────────────┬───────────────────────────────────────┘
-                      │ Envía: "Recarga $5 a Claro 0991234567"
+                      │ "Quiero Netflix" / "Recarga $5 a Claro 0991234567"
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    EVOLUTION API                             │
@@ -50,175 +59,124 @@
 ┌─────────────────────────────────────────────────────────────┐
 │               SERVER.JS (Express + Node.js)                  │
 ├─────────────────────────────────────────────────────────────┤
-│  1. Recibe webhook de Evolution API                         │
-│  2. Extrae mensaje (soporta v1 y v2 del API)               │
-│  3. Filtra mensajes propios (fromMe)                       │
-│  4. Verifica autorización del número                       │
-│  5. Consulta a DeepSeek AI para clasificar intención       │
-│  6. Mantiene contexto de conversación (30 min)              │
-│  7. Si datos completos → ejecuta scraper                   │
-│  8. Responde al usuario por WhatsApp                       │
-│  9. Guarda log de transacción                              │
+│  1. Recibe webhook, filtra fromMe y mensajes viejos          │
+│  2. Verifica número autorizado + límite diario               │
+│  3. DeepSeek clasifica: topup | bill | order | greeting      │
+│  4. Mantiene contexto de conversación (BD + memoria, 30 min) │
+│  5. topup/bill: junta datos directo. order: descubre el      │
+│     formulario real en BeMovil (processOrder dryRun) y       │
+│     pregunta dinámicamente lo que haga falta                 │
+│  6. Cuando todo está completo, genera un CÓDIGO de 4 dígitos  │
+│     y se lo manda SOLO al administrador (no al cliente)      │
+│  7. El cliente paga en efectivo/transferencia al admin        │
+│  8. El cliente reenvía el código → AHÍ se ejecuta el cobro    │
+│     real en BeMovil                                           │
 └─────────────────────┬───────────────────────────────────────┘
-                      │ Llamada a scraper.sellTopup() o payBill()
+                      │ scraper.sellTopup() / payBill() / processOrder()
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              SCRAPER.JS (Playwright + Chromium)              │
+│         SCRAPER.JS (Playwright + Chromium, modo headed)      │
 ├─────────────────────────────────────────────────────────────┤
-│  1. Abre navegador headless Chromium                        │
-│  2. Navega a https://bemovil.net/login                      │
-│  3. Selecciona país Ecuador (+593)                          │
-│  4. Ingresa usuario y contraseña                            │
-│  5. Navega a sección de Recargas o Recaudos                 │
-│  6. Busca inputs por placeholder/texto                      │
-│  7. Ingresa datos (operadora, teléfono, monto)             │
-│  8. Hace clic en botones de venta                           │
-│  9. Captura screenshot del resultado                        │
-│  10. Detecta mensajes de éxito/error                        │
-│  11. Retorna resultado                                      │
+│  1. Reutiliza sesión guardada (.bemovil-session.json) si      │
+│     sigue vigente; si no, hace login completo (tecleado       │
+│     humano, headless:false — BeMovil bloquea Chromium         │
+│     headless real con un HTTP 400 disfrazado de error)        │
+│  2. Busca el producto en el buscador real de BeMovil          │
+│  3. Descubre labels/botones reales del formulario en vivo     │
+│     (no hay un formulario fijo por categoría)                 │
+│  4. Llena los campos y se DETIENE antes de cualquier botón    │
+│     que cobre, salvo que confirm:true                         │
+│  5. Detecta éxito/error comparando banners antes/después y    │
+│     si el modal de confirmación sigue abierto tras el click   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Tecnologías y Herramientas Usadas
+## Los 3 Intents: topup / bill / order
 
-| Tecnología | Versión | Propósito |
-|---|---|---|
-| **Node.js** | v24.12.0 | Runtime del servidor |
-| **Express.js** | v5.2.1 | Framework HTTP, manejo de rutas y webhooks |
-| **body-parser** | v2.3.0 | Parseo de JSON en peticiones entrantes |
-| **Axios** | v1.18.0 | Cliente HTTP para Evolution API y DeepSeek API |
-| **Playwright** | v1.61.0 | Automatización de navegador (scraper) |
-| **Chromium** | (incluido) | Motor de navegación headless |
-| **dotenv** | v17.4.2 | Carga de variables de entorno (.env) |
-| **DeepSeek AI** | deepseek-chat | Procesamiento de lenguaje natural (NLP) |
-| **Evolution API** | v2.x | Gateway WhatsApp (webhook) |
-| **BeMovil** | — | Plataforma de recargas y pagos (target) |
+DeepSeek clasifica cada mensaje en uno de estos:
 
-### APIs Externas
-
-| API | Endpoint | Costo | Uso |
+| Intent | Para qué | Función de scraper.js | Patrón del formulario |
 |---|---|---|---|
-| **DeepSeek** | `POST https://api.deepseek.com/chat/completions` | ~$0.14/1M tokens | Análisis de intención, contexto, extracción de datos |
-| **Evolution API** | `POST http://localhost:8080/message/sendText/{instance}` | Gratis (local) | Envío de mensajes e imágenes a WhatsApp |
+| **`topup`** | Recargas de saldo móvil | `sellTopup(operator, phone, amount)` | Teléfono + monto → "Vender recarga" (un solo paso, sin confirmación previa) |
+| **`bill`** | Servicios de **una sola referencia** a consultar (agua, luz, SRI, registro civil, tránsito, cobranza bancaria) | `payBill(service, reference, {confirm})` | Referencia → "Consultar"/"Realizar consulta" → modal "Confirmar venta" |
+| **`order`** | **Todo lo demás** que vende BeMovil: streaming (Netflix, Disney+...), paquetes de datos, pines de juegos, depósitos bancarios, apuestas/pronósticos, lotería, retiros, internacionales | `processOrder(product, {tierChoice, fields, confirm})` | Variable — se descubre en vivo (ver abajo) |
+
+`order` es el intent genérico: en vez de tener un formulario hardcodeado por categoría, `processOrder()` navega al producto, detecta si hay un modal "Escoger Producto" (planes/tiers con precio) y qué campos reales pide BeMovil, y `server.js` se lo pregunta al cliente dinámicamente usando esos nombres reales — no una lista fija. Ver `dryrun_results.json` para el catálogo completo ya verificado (136 productos).
 
 ---
 
-## Flujo de Funcionamiento
+## Confirmación de pago: código por pedido vía administrador
 
-### 🔄 Ciclo Completo de una Recarga
+No hay un PIN fijo. El flujo real (decidido para que coincida con el negocio real: el cliente paga en efectivo o transferencia, no hay pasarela de pago integrada):
 
-```
-1. Usuario escribe: "Recarga $5 a Claro 0991234567"
-2. Evolution API recibe el mensaje → POST a /webhook
-3. server.js extrae el mensaje, verifica fromMe y autorización
-4. Envía prompt con contexto a DeepSeek AI
-5. DeepSeek devuelve JSON:
-   {
-     "intent": "topup",
-     "is_complete": true,
-     "reply_message": "Perfecto, voy a recargar $5 a Claro (0991234567)...",
-     "topup_data": {
-       "operator": "Claro",
-       "phone": "0991234567",
-       "amount": "5"
-     }
-   }
-6. server.js envía confirmación al usuario
-7. Ejecuta scraper.sellTopup("Claro", "0991234567", "5")
-8. Playwright abre BeMovil, hace login, navega a recargas
-9. Ingresa datos, hace clic en vender, captura resultado
-10. Envía resultado final al usuario
-11. Guarda log en transactions.json
-```
+1. El bot junta todos los datos del pedido (y, si es `bill`/`order`, primero hace una **consulta de solo lectura** para mostrar el monto/detalle real).
+2. Genera un código de **4 dígitos nuevo** (nunca el mismo dos veces) y se lo manda **solo al administrador** (`ADMIN_NUMBERS`), junto con los datos del cliente y el pedido.
+3. El cliente paga en efectivo o por transferencia **directamente al administrador**, fuera del bot.
+4. El administrador, ya con el pago confirmado, le dicta el código al cliente.
+5. El cliente responde ese código por WhatsApp → **ahí y solo ahí** se ejecuta la acción real en BeMovil (`confirm: true`).
+6. El administrador también recibe un aviso de éxito o error tras la ejecución (importante si ya cobró el efectivo y la transacción falla).
 
-### 🔄 Ciclo de Conversación Multi-Mensaje (con contexto)
+Si `ADMIN_NUMBERS` no está configurado, el bot rechaza el pedido en vez de ejecutarlo sin confirmación (falla cerrado).
 
-```
-Usuario: "Quiero una recarga"
-  → DeepSeek: intent="topup", is_complete=false
-  → Bot: "¿Para qué operadora, número y monto?"
+---
 
-Usuario: "A Movistar"
-  → DeepSeek: conserva "operator"="Movistar" en contexto, faltan phone y amount
-  → Bot: "¿Cuál es el número y el monto?"
+## BeMovil: anti-bot y selectores reales
 
-Usuario: "0991234567, $10"
-  → DeepSeek: usa contexto (Movistar) + datos nuevos → is_complete=true
-  → Bot: ejecuta recarga de $10 a Movistar 0991234567
-```
+Cosas no obvias descubiertas a fuerza de pruebas reales (ver también los comentarios en `scraper.js`):
+
+- **BeMovil bloquea Chromium headless** con un HTTP 400 "La transacción ya se está procesando `<id>`" — el `<id>` es en realidad el ID de usuario, no una transacción real; es un mensaje de detección de bots disfrazado. Por eso `scraper.js` usa `headless: false` (en Docker corre contra **Xvfb**, una pantalla virtual) + user-agent real + `navigator.webdriver` oculto + tecleo carácter por carácter en el login.
+- Sesión persistida en `.bemovil-session.json` (gitignored) para no loguearse en cada llamada — `ensureLoggedIn()` la reutiliza si sigue vigente y solo hace login completo si caducó.
+- Los inputs usan `<label for="...">` flotante, **no** `placeholder`.
+- El modal de "Escoger Producto" / "Confirmar venta" usa la clase real `dialog-root`/`dialog-section`, no `[class*="modal"]`.
+- El botón final de venta dice literalmente **"Si, realizar venta"** sin tilde en "Si".
+- Operadoras de recarga reales (las únicas válidas): **Claro, Movistar, Tuenti, CNT, Akimovil, Maxiplus**. ("OpenMobile" no existe en BeMovil — era un dato inventado en una versión anterior del prompt.)
+- El buscador de BeMovil es literal, no difuso: "Reg Civil" no encuentra nada, hace falta "Registro Civil" completo. Para "CNEL" hace falta especificar la regional (ej. "CNEL Guayaquil") — hay 12 entidades CNEL distintas.
+
+---
+
+## Tecnologías y Herramientas Usadas
+
+| Tecnología | Propósito |
+|---|---|
+| **Node.js** | Runtime del servidor |
+| **Express.js** | Framework HTTP, webhook |
+| **Playwright** | Automatización de navegador (scraper) — modo `headless:false` + Xvfb en producción |
+| **MySQL** (`mysql2`) | Persistencia de conversaciones, transacciones, números autorizados y límites diarios |
+| **DeepSeek AI** (`deepseek-chat`) | Clasificación de intención, extracción de datos, prompts dinámicos para `order` |
+| **Evolution API** | Gateway WhatsApp (instancia compartida con el proyecto "sistema-kiosko", ver más abajo) |
+| **Docker / docker-compose** | Despliegue (bot + MySQL + phpMyAdmin), con Xvfb dentro del contenedor |
 
 ---
 
 ## Lo que se Implementó ✅
 
-### ✅ Funcionalidades Completas
-
-| # | Funcionalidad | Archivo | Detalle Técnico |
-|---|---|---|---|
-| 1 | **Webhook Evolution API** | `server.js` | Soporte para Evolution API v1 y v2. Extrae `conversation`, `extendedTextMessage` e `imageMessage.caption` |
-| 2 | **Autenticación en BeMovil** | `scraper.js` | Login con selección de país (+593 Ecuador), 2 pasos (usuario → contraseña), espera de URL `/backoffice/**` |
-| 3 | **Recargas (sellTopup)** | `scraper.js` | Navega a `/backoffice/sell`, busca operadora por texto, inputs por placeholder, botones por regex, captura screenshots |
-| 4 | **Pago de Servicios (payBill)** | `scraper.js` | Navega a `/backoffice/collection`, busca servicio, ingresa referencia, captura resultado |
-| 5 | **Análisis con DeepSeek AI** | `server.js` | Prompt con contexto, operadoras válidas, servicios válidos, formato JSON estricto, manejo de saludos y desconocidos |
-| 6 | **Contexto de Conversación** | `server.js` | `Map<remoteJid, Conversation>` con timeout de 30 min, limpieza automática cada 5 min, merge de datos parciales |
-| 7 | **Filtro de Autorización** | `server.js` | Variable `AUTHORIZED_NUMBERS` en `.env`. Soporta lista separada por comas o `*` para todos |
-| 8 | **Logs de Transacciones** | `server.js` | Archivo `transactions.json` con tipo, datos, estado, error y timestamp. Últimas 1000 transacciones |
-| 9 | **Envío de Imágenes** | `server.js` | Función `sendImageMessage()` codifica imagen a base64 y envía vía Evolution API |
-| 10 | **Endpoints /health y /stats** | `server.js` | Health check con uptime/memoria/conversaciones activas. Stats con conteo de transacciones |
-| 11 | **Saludos e Intención Desconocida** | `server.js` | Detecta `intent: "greeting"` y responde presentación. `intent: "unknown"` pide aclaración |
-| 12 | **Manejo de Errores** | `scraper.js` | Captura errores, toma screenshot, retorna `{success: false, error: mensaje}` |
-| 13 | **CLI para pruebas** | `scraper.js` | `node scraper.js topup "Claro" 0991234567 5` y `node scraper.js bill "CNEL" 1234567890` |
-| 14 | **Guía de Configuración** | `SETUP.md` | Pasos para obtener API Key de DeepSeek, configurar Evolution API y desplegar |
-
-### ✅ Mejoras Técnicas
-
-- **Selectores dinámicos**: Busca inputs por placeholder, tipo y posición; botones por regex de texto
-- **Screenshots automáticos**: Captura resultados exitosos y errores para debugging
-- **Detección de éxito/error**: Busca palabras clave en la página después de la transacción
-- **Timeout en navegador**: Chromium con `--no-sandbox` para entornos restringidos
-- **Expresiones regulares**: Para buscar botones y confirmaciones
-- **Merge de contexto**: Combina datos de mensajes anteriores con los nuevos automáticamente
+| Área | Detalle |
+|---|---|
+| **Login real anti-bot** | Headed + Xvfb, tecleo humano, sesión persistida y reutilizada automáticamente |
+| **Recargas (`topup`)** | Las 6 operadoras reales verificadas con datos reales (sin ejecutar venta real) |
+| **Pago de servicios (`bill`)** | Verificado con CNT, Agua (varias EPMAPS/Servipagos/Ser. Básicos), SRI — incluye detección de banners de error específicos por categoría (ej. "No se permite realizar transacciones en este horario") |
+| **Cualquier otro producto (`order`)** | `processOrder()` genérico: descubre tiers/campos en vivo. Verificado contra los 136 productos no-Recargas del catálogo (`dryrun_results.json`) |
+| **Confirmación por código de administrador** | Reemplaza un PIN fijo; código nuevo por pedido, nunca conocido de antemano por el cliente |
+| **Persistencia en MySQL** | Conversaciones, transacciones, números autorizados, límites diarios (`db.js`/`init.sql`), con fallback a memoria si la BD no está disponible |
+| **Multi-turno sin perder datos** | Merge de contexto que ignora valores `null`/vacíos devueltos por la IA en turnos posteriores (bug real encontrado y corregido) |
+| **Dashboard** | `dashboard.html` consumiendo `/stats` |
+| **Docker** | `Dockerfile` con Xvfb/xauth, `docker-compose.yml` con MySQL + phpMyAdmin + red compartida con Evolution API |
+| **CLI para pruebas** | `node scraper.js topup ...` / `bill ...` |
 
 ---
 
-## Lo que Falta Implementar ❌
+## Lo que Falta / Limitaciones Conocidas ⚠️
 
-### 🔴 Crítico
-
-| # | Pendiente | Impacto | Solución |
-|---|---|---|---|
-| 1 | **Selectores exactos del DOM post-login** | El scraper usa selectores genéricos. Si BeMovil cambia, falla | Ejecutar scraper y ajustar selectores a clases CSS reales según screenshots |
-| 2 | **Manejo de stock/saldo insuficiente** | Si no hay saldo, el scraper falla sin avisar al usuario | Detectar "saldo insuficiente" y notificar |
-| 3 | **Confirmación antes de ejecutar** | Ejecuta inmediatamente al tener todos los datos | Pedir "¿Confirmas la recarga de $5 a Claro 0991234567?" |
-
-### 🟠 Alto
-
-| # | Pendiente | Impacto | Solución |
-|---|---|---|---|
-| 4 | **Base de datos persistente** | Conversaciones se pierden al reiniciar | SQLite o Redis para persistencia |
-| 5 | **Validación de montos mínimos/máximos** | Usuario puede pedir montos no soportados | Validar $1-$50 antes de ejecutar |
-| 6 | **Notificación proactiva al usuario** | Usuario no sabe si fue exitoso hasta que responde | Enviar "procesando..." inmediato |
-| 7 | **Más variantes de lenguaje** | Algunas formas de pedir recarga no se detectan | Mejorar prompt con más ejemplos |
-
-### 🟡 Media
-
-| # | Pendiente | Solución Propuesta |
+| # | Limitación | Detalle |
 |---|---|---|
-| 8 | Más servicios en prompt | Agregar más servicios al prompt de DeepSeek |
-| 9 | Logging en archivo | Implementar winston/pino para logs rotativos |
-| 10 | Dashboard web | Panel HTML/JS que consuma `/stats` |
-| 11 | Rate limiting | Límite de 10 recargas/día por número |
-| 12 | Manejo de 2FA | Detectar 2FA en BeMovil y notificar al admin |
-
-### 🟢 Baja
-
-| # | Pendiente | Solución Propuesta |
-|---|---|---|
-| 13 | Múltiples idiomas | Detección de idioma del mensaje |
-| 14 | Pruebas unitarias | Tests con Jest |
-| 15 | Dockerización | Dockerfile con Chromium incluido |
+| 1 | **Ningún pago/recarga real completado de principio a fin** | Todas las pruebas con `confirm:true` terminaron en rechazo controlado (saldo insuficiente, datos de prueba inválidos). El código está verificado para detectar ambos casos correctamente, pero el "camino feliz" real nunca se vio. |
+| 2 | **Build de Docker sin probar en contenedor real** | El Dockerfile/compose están listos pero no se completó un build+run real en esta máquina (bloqueado por espacio en disco al momento de escribir esto). |
+| 3 | **Pega2/Pega3/Pega4 (combinaciones de lotería)** | Usan un selector de dígitos de varios pasos, no un formulario simple — `processOrder` los detecta pero el botón de acción real ("Agregar combinación") no es el envío final. Seguro (no cobra mal), pero incompleto. |
+| 4 | **Internacionales** | Descubrimiento verificado (todos tienen selector de plan), pero nunca se probó el llenado completo de campos. |
+| 5 | **Migración de BD existente** | `init.sql` ya incluye `'order'` en el ENUM de `transactions.type`, pero una base de datos ya creada con la versión vieja necesita `ALTER TABLE transactions MODIFY type ENUM('topup','bill','order')` manual. |
+| 6 | **Nunca probado con Evolution API real** | Todas las pruebas de conversación se hicieron simulando el webhook directamente con `curl`, no con WhatsApp real. |
 
 ---
 
@@ -226,21 +184,18 @@ Usuario: "0991234567, $10"
 
 ```
 📁 webscrapper/
-├── 📄 server.js              # 🔧 Servidor Express + webhook + DeepSeek AI + contexto + logs + stats (446 líneas)
-├── 📄 scraper.js             # 🔧 Automatización Playwright para BeMovil (login, recargas, pagos)
-├── 📄 .env                   # 🔒 Variables de entorno (NO SUBIR A GIT)
-├── 📄 .env.example           # 📝 Ejemplo de variables
-├── 📄 package.json           # 📦 Dependencias y scripts
-├── 📄 package-lock.json      # 🔒 Lockfile
-├── 📄 README.md              # 📖 Documentación
-├── 📄 SETUP.md               # 📖 Guía rápida
-├── 📄 transactions.json      # 📊 Log de transacciones (se genera automáticamente)
-├── 📄 dashboard.html         # 🐛 Debug: HTML del login de BeMovil
-├── 📄 dashboard.png          # 🐛 Debug: screenshot del login
-├── 📄 dom.html               # 🐛 Debug: DOM extraído
-├── 📄 login_page.png         # 🐛 Debug: screenshot login
-├── 📄 dashboard_texts.json   # 🐛 Debug: textos del DOM
-├── 📁 node_modules/          # 📦 Dependencias (ignorado por git)
+├── server.js                # Express + webhook + DeepSeek (3 intents) + contexto + confirmación por código
+├── scraper.js                # Playwright: login anti-bot, sellTopup, payBill, processOrder (genérico)
+├── db.js                     # Conexión MySQL (conversaciones, transacciones, auth, límites diarios)
+├── init.sql                  # Esquema de la base de datos
+├── dashboard.html            # Panel web (consume /stats)
+├── Dockerfile                # Node + Chromium + Xvfb/xauth
+├── docker-compose.yml        # bot + mysql + phpmyadmin + red compartida con Evolution API
+├── product_catalog.json      # Catálogo real de BeMovil escaneado (12 categorías)
+├── dryrun_results.json       # Resultado de inspeccionar los 136 productos no-Recargas con processOrder
+├── .env / .env.example       # Variables de entorno (.env NO se sube a git)
+├── package.json
+└── node_modules/              # (ignorado por git)
 ```
 
 ---
@@ -250,7 +205,7 @@ Usuario: "0991234567, $10"
 ### Prerrequisitos
 
 ```bash
-node --version   # v18+ (v24.12.0 recomendado)
+node --version   # v18+
 npx playwright install chromium
 ```
 
@@ -267,65 +222,66 @@ npx playwright install chromium
 
 ```bash
 cp .env.example .env
-# Editar .env con tus credenciales
+# Editar .env con tus credenciales reales
 ```
 
-### Iniciar
+### Iniciar (sin Docker, modo local)
 
 ```bash
 npm start
 ```
 
-Verás:
-
-```
-===============================================
-    RICKTECH/BEMOVIL WHATSAPP BOT
-===============================================
-  Puerto:        3000
-  Webhook:       /webhook
-  Health:        /health
-  Stats:         /stats
-  Evolution API: http://localhost:8080
-  DeepSeek API:  OK
-  Aut. Numbers:  Todos
-===============================================
-```
+> En local (fuera de Docker) `scraper.js` abre una ventana real de Chromium (`headless:false`) — es necesario porque BeMovil bloquea el modo headless. En Docker, esto corre contra Xvfb automáticamente (ver sección Docker).
 
 ---
 
 ## Variables de Entorno
 
 ```env
-# === CREDENCIALES BEMOVIL ===
+# Credenciales de BeMovil
 BEMOVIL_USER=tu_usuario_bemovil
-BEMOVIL_PASS=tu_contraseña
+BEMOVIL_PASS=tu_password_bemovil
 
-# === DEEPSEEK AI (para analizar mensajes) ===
-DEEPSEEK_API_KEY=sk-tu-api-key-de-deepseek
-
-# === EVOLUTION API (gateway WhatsApp) ===
+# Evolution API (gateway WhatsApp)
 EVOLUTION_API_URL=http://localhost:8080
-EVOLUTION_API_TOKEN=tu_token_evolution
+EVOLUTION_API_TOKEN=tu_token_aqui
 INSTANCE_NAME=tu_instancia
 
-# === OPCIONAL ===
-# AUTHORIZED_NUMBERS=593991234567,593998765432   # * = todos
-# PORT=3000
+# DeepSeek AI
+DEEPSEEK_API_KEY=tu_api_key_aqui
+
+# Número(s) de WhatsApp del administrador que recibe el código de
+# confirmación de cada pedido (solo dígitos, sin "+"; varios separados por coma)
+ADMIN_NUMBERS=593987654321
+
+# Números autorizados a usar el bot (separados por coma, o * para todos)
+AUTHORIZED_NUMBERS=*
+
+# Credenciales de MySQL (usadas por docker-compose)
+MYSQL_ROOT_PASSWORD=elige_una_contraseña_fuerte
+MYSQL_PASSWORD=elige_otra_contraseña_fuerte
 ```
 
 | Variable | Obligatorio | Descripción |
 |---|---|---|
-| `BEMOVIL_USER` | ✅ | Usuario de BeMovil |
-| `BEMOVIL_PASS` | ✅ | Contraseña de BeMovil |
+| `BEMOVIL_USER` / `BEMOVIL_PASS` | ✅ | Credenciales reales de BeMovil |
 | `DEEPSEEK_API_KEY` | ✅ | API Key de DeepSeek (fallback a `OPENAI_API_KEY`) |
-| `EVOLUTION_API_URL` | ✅ | URL de Evolution API (default: `http://localhost:8080`) |
-| `EVOLUTION_API_TOKEN` | ✅ | Token de autenticación |
-| `INSTANCE_NAME` | ✅ | Nombre de la instancia en Evolution API |
-| `AUTHORIZED_NUMBERS` | ❌ | Números autorizados. `*` = todos |
-| `PORT` | ❌ | Puerto (default: 3000) |
+| `EVOLUTION_API_URL` / `EVOLUTION_API_TOKEN` / `INSTANCE_NAME` | ✅ | Gateway de WhatsApp |
+| `ADMIN_NUMBERS` | ✅ para producción | Sin esto, el bot rechaza todos los pedidos (no hay forma de confirmar pagos) |
+| `AUTHORIZED_NUMBERS` | ❌ | `*` = cualquiera puede usar el bot. En producción real, restringir. |
+| `MYSQL_ROOT_PASSWORD` / `MYSQL_PASSWORD` | ✅ para Docker | Sin defaults — deben definirse explícitamente |
 
-> `DEEPSEEK_API_KEY` también acepta `OPENAI_API_KEY` como fallback (mismo formato de API).
+---
+
+## Docker
+
+```bash
+docker compose up -d --build
+```
+
+El `Dockerfile` instala `xvfb` + `xauth` y el `CMD` arranca el bot envuelto en `xvfb-run`, porque `scraper.js` necesita `headless:false` (ver sección anti-bot) y un contenedor no tiene pantalla física. `docker-compose.yml` define `shm_size: 1gb` para el contenedor del bot (Chromium necesita más `/dev/shm` que el default de Docker).
+
+> **No probado en un build real todavía** — ver "Limitaciones Conocidas".
 
 ---
 
@@ -334,40 +290,23 @@ INSTANCE_NAME=tu_instancia
 | Método | Ruta | Descripción |
 |---|---|---|
 | `POST` | `/webhook` | Webhook para Evolution API |
-| `GET` | `/health` | Health check (uptime, memoria, conversaciones) |
-| `GET` | `/stats` | Estadísticas de transacciones |
+| `GET` | `/health` | Health check (uptime, memoria, conversaciones activas) |
+| `GET` | `/stats` | Estadísticas de transacciones (desde MySQL) |
+| `GET` | `/dashboard` | Panel HTML |
 
-### `/health`
+---
 
-```bash
-curl http://localhost:3000/health
-```
-
-```json
-{
-  "status": "ok",
-  "uptime": 1234.56,
-  "timestamp": "2026-06-21T20:34:39.066Z",
-  "memory": { "rss": 126722048, "heapTotal": 115740672, "heapUsed": 57218440 },
-  "conversations_active": 0
-}
-```
-
-### `/stats`
+## Uso desde Línea de Comandos
 
 ```bash
-curl http://localhost:3000/stats
+# Recarga (operadoras válidas: Claro, Movistar, Tuenti, CNT, Akimovil, Maxiplus)
+node scraper.js topup "Claro" 0991234567 5
+
+# Pago/consulta de servicio de una sola referencia
+node scraper.js bill "CNT Telefonia Fija" 1234567890
 ```
 
-```json
-{
-  "total_transactions": 15,
-  "topups": { "total": 10, "success": 8, "failed": 2 },
-  "bills": { "total": 5, "success": 4, "failed": 1 },
-  "active_conversations": 0,
-  "last_10": [{ "type": "topup", "operator": "Claro", "status": "success" }]
-}
-```
+`processOrder()` (intent `order`, cualquier otro producto) no tiene CLI propia todavía — se invoca solo desde `server.js`.
 
 ---
 
@@ -431,45 +370,10 @@ Solución: `docker restart evolution_api` (~15s). La sesión/pairing no se pierd
 
 ### El bot no refleja cambios de código después de editar `server.js`
 
-El servicio `bot` en `docker-compose.yml` usa `build: .` **sin bind-mount** del código fuente (solo se monta el volumen `bot_screenshots`). Esto significa que `docker compose restart bot` o `docker restart ricktech-bot` **reinician la imagen ya compilada**, sin aplicar cambios hechos en el código local.
-
-Para que un cambio en `server.js`/`scraper.js`/`db.js` se refleje, hay que reconstruir la imagen:
+El servicio `bot` en `docker-compose.yml` usa `build: .` **sin bind-mount** del código fuente. Para que un cambio en `server.js`/`scraper.js`/`db.js` se refleje, hay que reconstruir la imagen:
 
 ```bash
 docker compose up -d --build bot
-```
-
----
-
-## Uso desde Línea de Comandos
-
-```bash
-# Recarga
-node scraper.js topup "Claro" 0991234567 5
-
-# Pago de servicio
-node scraper.js bill "CNEL" 1234567890
-
-# Ver código de salida
-node scraper.js topup "Claro" 0991234567 5 && echo "Exito" || echo "Fallo"
-```
-
-| Comando | Arg 1 | Arg 2 | Arg 3 |
-|---|---|---|---|
-| `topup` | Operadora (Claro, Movistar, CNT, Tuenti, OpenMobile) | Teléfono (10 dígitos) | Monto (5, 10, 20) |
-| `bill` | Servicio (CNEL, CNT, ETAPA, Agua Quito) | Referencia (cédula/contrato) | — |
-
----
-
-## Scripts NPM
-
-```bash
-npm start         # Iniciar servidor
-npm run dev       # Iniciar con --watch (reinicio automático al editar)
-npm test          # Probar scraper: recarga $1 a Claro 0991234567
-npm run test:bill # Probar scraper: consulta CNEL
-npm run health    # curl http://localhost:3000/health
-npm run stats     # curl http://localhost:3000/stats
 ```
 
 ---
@@ -488,40 +392,34 @@ Causa: Chromium no instalado
 Solucion: npx playwright install chromium
 ```
 
-### DeepSeek 401 Unauthorized
+### DeepSeek 402 / "Insufficient Balance"
 ```
-Causa: API Key inválida o desactivada
-Solucion:
-  1. Ir a https://platform.deepseek.com/api_keys
-  2. Verificar toggle verde (activated)
-  3. Copiar key correcta a DEEPSEEK_API_KEY en .env
-```
-
-### DeepSeek 402 Payment Required
-```
-Causa: Saldo insuficiente
-Solucion: Ir a https://platform.deepseek.com/top_up
+Causa: Saldo insuficiente en la cuenta de DeepSeek
+Solucion: https://platform.deepseek.com/top_up
+IMPORTANTE: si esto pasa sin haber usado mucho la API, revisar primero que
+la API key no se haya filtrado publicamente (ver historial de seguridad
+del repo) antes de simplemente recargar saldo.
 ```
 
-### Login en BeMovil falla
+### Login en BeMovil falla / HTTP 400 "transacción ya se está procesando"
 ```
-Causa: Credenciales incorrectas o cambios en el login
-Solucion: Verificar BEMOVIL_USER y BEMOVIL_PASS en .env
-         Revisar login_page.png para ver el error
+Causa: BeMovil detectó el navegador como bot (Chromium headless real,
+o demasiados intentos de login en poco tiempo).
+Solucion: confirmar que scraper.js esta usando headless:false (en Docker,
+corriendo contra Xvfb). Ver seccion "BeMovil: anti-bot y selectores reales".
+```
+
+### El build de Docker falla con errores raros / muy lento
+```
+Causa probable: poco espacio en disco. Un build de esta imagen (Node +
+Chromium + Xvfb + MySQL) necesita varios GB libres comodos.
+Solucion: liberar espacio (docker system prune, revisar que no haya
+otra cosa llenando el disco) antes de reintentar.
 ```
 
 ### WhatsApp no conecta / QR falla / mensajes no llegan
 ```
 Ver seccion "Evolution API: infraestructura compartida" mas arriba.
-Causas mas comunes: imagen :latest con bug de Baileys RC, QR estatico vencido,
-o socket "zombie" (state=open pero Baileys no recibe nada -> reiniciar evolution_api).
-```
-
-### El bot no responde y no aparece nada en los logs ni con un log de debug agregado
-```
-Causa probable: editaste server.js pero solo hiciste restart, no rebuild.
-Solucion: docker compose up -d --build bot (ver seccion "Evolution API:
-infraestructura compartida" -> "El bot no refleja cambios de codigo").
 ```
 
 ---
@@ -529,8 +427,6 @@ infraestructura compartida" -> "El bot no refleja cambios de codigo").
 ## Licencia
 
 **Uso privado — RickTech** © 2026
-
----
 
 ## Repositorio
 
