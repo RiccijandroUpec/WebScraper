@@ -338,7 +338,7 @@ async function payBill(serviceName, reference, { confirm = false } = {}) {
         // el detalle (monto, comisión, total) Y para detectar el resultado
         // del pago: errores como "No dispone de suficiente saldo" se renderizan
         // DENTRO de este modal con su propia clase, no en ".message-container".
-        const confirmModal = page.locator('[class*="modal"]', { hasText: /Confirmar/i }).first();
+        const confirmModal = page.locator('[class*="dialog-root"]', { hasText: /Confirmar/i }).first();
         const details = await confirmModal.innerText().catch(() => null)
             || (await getBanners().catch(() => [])).join(' / ');
         console.log(`   📊 Detalle de la consulta:\n${(details || '').substring(0, 500)}`);
@@ -379,9 +379,228 @@ async function payBill(serviceName, reference, { confirm = false } = {}) {
     }
 }
 
+// ============================================================
+// PEDIDO GENÉRICO (processOrder) — cualquier categoría no cubierta por
+// sellTopup/payBill: Tv Digital, Paquetes, Entretenimiento, Depósitos,
+// Internacionales, Lotería, Retiros, Pronósticos, etc.
+// ============================================================
+//
+// Modos de uso:
+//   dryRun:true   -> solo descubre el formulario real (tiers/labels), no
+//                    hace click en nada que pueda costar dinero. Seguro.
+//   confirm:false (default) -> llena los campos y se detiene justo antes
+//                    de pulsar el botón que cobra (Vender/Procesar/Cargar).
+//                    Si el botón es de solo-consulta (Consultar/Realizar
+//                    consulta) sí lo pulsa, porque eso no cobra nada.
+//   confirm:true  -> ejecuta la acción real (cobra). Solo debe llamarse
+//                    después de que el administrador confirmó el pedido.
+const FIELD_PATTERNS = [
+    // "número" solo no cuenta como teléfono: choca con "Número de Cuenta".
+    { key: 'phone', re: /celular|tel[eé]fono/i },
+    { key: 'email', re: /correo|email/i },
+    { key: 'account', re: /nro\s*cuenta|contrato|cuenta|suministro|c[eé]dula|documento|placa|referencia|ruc|c[oó]digo|clave/i },
+    { key: 'amount', re: /valor|monto/i }
+];
+
+function resolveFieldValue(label, fields) {
+    const pattern = FIELD_PATTERNS.find(p => p.re.test(label));
+    if (pattern && fields[pattern.key] != null && fields[pattern.key] !== '') return fields[pattern.key];
+    return fields[label] != null ? fields[label] : null;
+}
+
+async function processOrder(productQuery, opts = {}) {
+    const { categoryHint, tierChoice, fields = {}, confirm = false, dryRun = false } = opts;
+    const { browser, context } = await launchStealthBrowser();
+    const page = await context.newPage();
+
+    try {
+        await ensureLoggedIn(page);
+
+        console.log('============================================');
+        console.log(`🛒 ${dryRun ? 'INSPECCIONANDO' : confirm ? 'CONFIRMANDO' : 'PREPARANDO'} PEDIDO: ${productQuery}`);
+        console.log('============================================');
+
+        await page.goto('https://bemovil.net/backoffice/sell', { waitUntil: 'networkidle', timeout: 20000 });
+        await page.waitForTimeout(2000);
+
+        console.log(`   🔎 Buscando "${productQuery}" en el buscador de productos...`);
+        const searchInput = page.getByLabel('Buscar producto');
+        await searchInput.waitFor({ state: 'visible', timeout: 8000 });
+        await searchInput.click({ force: true });
+        await searchInput.fill(productQuery);
+        await page.waitForTimeout(1500);
+
+        let scope = page;
+        if (categoryHint) {
+            const heading = page.locator('h2', { hasText: categoryHint }).first();
+            const foundHeading = await heading.isVisible({ timeout: 5000 }).catch(() => false);
+            if (foundHeading) scope = heading.locator('xpath=following-sibling::*[1]');
+        }
+
+        const productItem = scope.locator('.item, [class*="item"]', { hasText: productQuery }).first();
+        const foundProduct = await productItem.isVisible({ timeout: 8000 }).catch(() => false);
+        if (!foundProduct) {
+            throw new Error(`No encontré "${productQuery}" en bemovil. Verifica el nombre exacto.`);
+        }
+        await productItem.click();
+        console.log(`   ✅ Producto seleccionado: ${productQuery}`);
+        await page.waitForTimeout(1500);
+
+        // Paso opcional: modal "Escoger Producto" (planes/tiers con precio,
+        // ej. Netflix 1 Pantalla $5.10 vs Netflix Completo $14.82).
+        const tierModal = page.locator('[class*="dialog-root"]', { hasText: 'Escoger Producto' }).first();
+        const hasTierModal = await tierModal.waitFor({ state: 'visible', timeout: 4000 }).then(() => true).catch(() => false);
+        let tierOptions = [];
+        if (hasTierModal) {
+            const rawOptions = await tierModal.locator('.item, [class*="item"]').allTextContents();
+            tierOptions = [...new Set(rawOptions.map(t => t.trim()).filter(t => t && t !== 'Escoger Producto'))];
+
+            if (!tierChoice) {
+                return { success: false, needsTierChoice: true, tierOptions, error: 'Hay varias opciones disponibles, falta elegir cuál.' };
+            }
+            const tierItem = tierModal.locator('.item, [class*="item"]', { hasText: tierChoice }).first();
+            const foundTier = await tierItem.isVisible({ timeout: 3000 }).catch(() => false);
+            if (!foundTier) {
+                return { success: false, needsTierChoice: true, tierOptions, error: `No encontré la opción "${tierChoice}".` };
+            }
+            await tierItem.click();
+            console.log(`   ✅ Opción elegida: ${tierChoice}`);
+            await page.waitForTimeout(1500);
+        }
+
+        // Descubrir los campos reales del formulario (label flotante real -> input)
+        const discoveredFields = await page.evaluate(() => {
+            return Array.from(document.querySelectorAll('input'))
+                .map(i => ({
+                    id: i.id,
+                    label: i.id ? (document.querySelector(`label[for="${i.id}"]`)?.innerText || '') : ''
+                }))
+                .filter(f => f.id && f.label);
+        });
+
+        const actionBtnText = await page.evaluate(() => {
+            const skip = /cancelar|atr[aá]s|volver/i;
+            const btn = Array.from(document.querySelectorAll('button')).find(b => {
+                const t = (b.innerText || '').trim();
+                return t && !skip.test(t) && b.offsetParent !== null;
+            });
+            return btn ? btn.innerText.trim() : null;
+        });
+
+        if (dryRun) {
+            return {
+                success: true,
+                dryRun: true,
+                tierOptions,
+                requiredFields: discoveredFields.map(f => f.label),
+                actionButton: actionBtnText
+            };
+        }
+
+        const missing = [];
+        for (const f of discoveredFields) {
+            const value = resolveFieldValue(f.label, fields);
+            if (value == null || value === '') {
+                missing.push(f.label);
+                continue;
+            }
+            // Selector de atributo, no #id: los ids generados por bemovil a
+            // veces empiezan con un dígito (ej. "544ee"), lo cual es inválido
+            // como selector CSS de id sin escapar.
+            const input = page.locator(`[id="${f.id}"]`);
+            await input.click({ force: true });
+            await input.fill('');
+            await input.fill(String(value));
+            console.log(`   ✅ ${f.label}: ${value}`);
+        }
+
+        if (missing.length > 0) {
+            return { success: false, missingFields: missing, tierOptions, error: `Faltan datos: ${missing.join(', ')}` };
+        }
+
+        await page.waitForTimeout(800);
+
+        // Los botones de solo-consulta son seguros de pulsar siempre (no
+        // cobran). El resto (Vender/Procesar/Cargar) solo se pulsa si
+        // confirm:true — es la frontera real de "esto mueve dinero".
+        const isConsultOnly = !!actionBtnText && /^consultar$|realizar consulta|ver factura/i.test(actionBtnText);
+
+        if (!actionBtnText) {
+            return { success: false, error: 'No encontré un botón de acción en el formulario.' };
+        }
+
+        if (!confirm && !isConsultOnly) {
+            const summary = discoveredFields
+                .map(f => `${f.label}: ${resolveFieldValue(f.label, fields)}`)
+                .join('\n');
+            return {
+                success: true,
+                pendingConfirm: true,
+                details: `Producto: ${productQuery}${tierChoice ? ` — ${tierChoice}` : ''}\n${summary}\nAcción pendiente: "${actionBtnText}" (no ejecutada todavía)`
+            };
+        }
+
+        const getBanners = () => page.locator('.message-container').allTextContents();
+        const bannersBefore = await getBanners().catch(() => []);
+
+        const actionBtn = page.getByRole('button', { name: actionBtnText, exact: true }).first();
+        await actionBtn.click();
+        console.log(`   ✅ Click en "${actionBtnText}"`);
+        await page.waitForTimeout(3000);
+        await page.screenshot({ path: 'order_resultado.png', fullPage: true });
+
+        const bannersAfter = await getBanners().catch(() => []);
+        const newBanners = bannersAfter.filter(b => !bannersBefore.includes(b));
+
+        // Igual que en payBill: bemovil suele mostrar un modal "Confirmar
+        // venta" antes de cobrar de verdad, sin importar el botón inicial.
+        const confirmBtn = page.getByRole('button', { name: /realizar venta|Confirmar pago|Confirmar venta|^Pagar$/i }).first();
+        const hasConfirmModal = await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false);
+
+        if (hasConfirmModal) {
+            if (newBanners.length > 0) throw new Error(newBanners.join(' / ').trim());
+
+            const confirmModal = page.locator('[class*="dialog-root"]', { hasText: /Confirmar/i }).first();
+            const details = await confirmModal.innerText().catch(() => '');
+
+            if (!confirm) {
+                return { success: true, pendingConfirm: true, details };
+            }
+
+            await confirmBtn.click();
+            console.log('   ✅ Click en confirmar pago');
+            await page.waitForTimeout(3000);
+            await page.screenshot({ path: 'order_resultado.png', fullPage: true });
+
+            const modalStillOpen = await confirmModal.isVisible({ timeout: 2000 }).catch(() => false);
+            if (modalStillOpen) {
+                const rejectionText = await confirmModal.innerText().catch(() => 'El pago no se completó.');
+                throw new Error(rejectionText.split('\n').find(l => l && !details.includes(l)) || rejectionText);
+            }
+            return { success: true, details };
+        }
+
+        // Sin modal de confirmación: el click ya ejecutó la acción
+        // directamente (patrón tipo "Vender recarga"). Revisar el resultado.
+        if (newBanners.length > 0) throw new Error(newBanners.join(' / ').trim());
+        const errorMsg = await page.getByText(/error|falló|rechazada|saldo insuficiente/i).first().textContent().catch(() => null);
+        if (errorMsg) throw new Error(errorMsg.trim());
+
+        return { success: true, details: 'Operación completada.' };
+
+    } catch (error) {
+        console.error('❌ Error en processOrder:', error.message);
+        await page.screenshot({ path: 'order_error.png', fullPage: true }).catch(() => {});
+        return { success: false, error: error.message };
+    } finally {
+        await browser.close();
+    }
+}
+
 module.exports = {
     sellTopup,
-    payBill
+    payBill,
+    processOrder
 };
 
 // ============================================================
