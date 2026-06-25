@@ -60,7 +60,7 @@ services:
       DB_PASSWORD: ${MYSQL_PASSWORD}
       DB_NAME: ricktech
       AUTHORIZED_NUMBERS: ${AUTHORIZED_NUMBERS:-*}
-      PAYMENT_PIN: ${PAYMENT_PIN}
+      ADMIN_NUMBERS: ${ADMIN_NUMBERS}
     ports:
       - "3000:3000"
     volumes:

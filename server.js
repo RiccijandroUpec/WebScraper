@@ -266,7 +266,7 @@ app.post('/webhook', async (req, res) => {
       const { operator, phone, amount } = aiResponse.topup_data;
       // Las recargas no tienen un paso previo de "consultar monto": el monto
       // ya lo dio el usuario, así que pedimos el PIN directamente sobre eso.
-      await requestPinConfirmation(remoteJid, {
+      await requestAdminConfirmation(remoteJid, {
         type: 'topup',
         data: { operator, phone, amount },
         summary: `📱 Recarga de *$${amount}* a *${operator}* (${phone})`
@@ -287,7 +287,7 @@ app.post('/webhook', async (req, res) => {
 
       // La consulta encontró algo para pagar; el pago real solo se hace tras
       // confirmar con PIN (puede ser dinero de terceros, ej. factura de SRI).
-      await requestPinConfirmation(remoteJid, {
+      await requestAdminConfirmation(remoteJid, {
         type: 'bill',
         data: { service, reference },
         summary: `📋 *${service}* (ref. ${reference})\n${(result.details || '').substring(0, 400)}`
@@ -299,24 +299,58 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ============================================
-// CONFIRMACIÓN CON PIN (antes de mover dinero real)
+// CONFIRMACIÓN POR CÓDIGO (pago en efectivo/transferencia al administrador)
 // ============================================
+//
+// El cliente NUNCA conoce el código de antemano. Flujo real:
+//   1. El bot junta los datos (recarga o servicio) y genera un código de
+//      4 dígitos NUEVO para ese pedido (uno distinto cada vez).
+//   2. El código se envía SOLO al administrador (ADMIN_NUMBERS), junto con
+//      el número del cliente y el detalle del pedido.
+//   3. El cliente paga en efectivo o por transferencia directamente al
+//      administrador (fuera del bot).
+//   4. El administrador, ya con el pago en mano, le dicta el código al
+//      cliente.
+//   5. El cliente responde ese código por WhatsApp y AHÍ se ejecuta la
+//      recarga/pago real en bemovil.
 
-const PAYMENT_PIN = process.env.PAYMENT_PIN || null;
-if (!PAYMENT_PIN) {
-  console.warn('[PIN] ⚠️  PAYMENT_PIN no está configurado: las recargas y pagos se ejecutarán SIN pedir confirmación.');
+const ADMIN_NUMBERS = (process.env.ADMIN_NUMBERS || '')
+  .split(',')
+  .map(n => n.trim())
+  .filter(Boolean);
+
+if (ADMIN_NUMBERS.length === 0) {
+  console.warn('[ADMIN] ⚠️  ADMIN_NUMBERS no está configurado: no hay forma de confirmar pagos, los pedidos quedarán pendientes para siempre.');
 }
 
-async function requestPinConfirmation(remoteJid, pending) {
-  if (!PAYMENT_PIN) {
-    // Sin PIN configurado, no hay forma de confirmar: ejecutar directo (comportamiento previo).
-    await executeConfirmedAction(remoteJid, pending);
+function generateConfirmationCode() {
+  return String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+}
+
+async function notifyAdmins(text) {
+  for (const phone of ADMIN_NUMBERS) {
+    await sendWhatsAppMessage(`${phone}@s.whatsapp.net`, text);
+  }
+}
+
+async function requestAdminConfirmation(remoteJid, pending) {
+  if (ADMIN_NUMBERS.length === 0) {
+    await sendWhatsAppMessage(remoteJid, '⚠️ El sistema de pagos no está disponible en este momento. Intenta más tarde.');
+    await deleteContext(remoteJid);
     return;
   }
-  await saveContext(remoteJid, { pendingConfirmation: pending });
+
+  const code = generateConfirmationCode();
+  await saveContext(remoteJid, { pendingConfirmation: { ...pending, code } });
+
+  const customerPhone = remoteJid.split('@')[0];
+  await notifyAdmins(
+    `🆕 Nuevo pedido de *${customerPhone}*\n${pending.summary}\n\n🔐 Código de confirmación: *${code}*\n\nEntrégaselo al cliente SOLO cuando confirmes que pagó (efectivo o transferencia).`
+  );
+
   await sendWhatsAppMessage(
     remoteJid,
-    `${pending.summary}\n\n🔐 Responde con el *PIN* para confirmar y procesar el pago, o escribe *cancelar*.`
+    `${pending.summary}\n\n💰 Para confirmar, realiza el pago en efectivo o por transferencia con nuestro administrador. Te dará un *código* — respóndelo aquí para procesar tu pedido, o escribe *cancelar*.`
   );
 }
 
@@ -324,13 +358,13 @@ async function handlePendingConfirmation(remoteJid, text, context) {
   const pending = context.pendingConfirmation;
 
   if (text.toLowerCase() === 'cancelar') {
-    await sendWhatsAppMessage(remoteJid, '🚫 Operación cancelada.');
+    await sendWhatsAppMessage(remoteJid, '🚫 Pedido cancelado.');
     await deleteContext(remoteJid);
     return;
   }
 
-  if (text !== PAYMENT_PIN) {
-    await sendWhatsAppMessage(remoteJid, '❌ PIN incorrecto. Responde con el PIN correcto o escribe *cancelar*.');
+  if (text !== pending.code) {
+    await sendWhatsAppMessage(remoteJid, '❌ Código incorrecto. Pide el código correcto a nuestro administrador, o escribe *cancelar*.');
     return;
   }
 
@@ -350,9 +384,11 @@ async function executeConfirmedAction(remoteJid, pending) {
       await sendWhatsAppMessage(remoteJid, `✅ Recarga exitosa!\n📱 ${operator}\n📞 ${phone}\n💰 $${amount}\n\nGracias 😊`);
       await db.saveTransaction({ type: 'topup', operator, phone, amount, remoteJid, status: 'success' }).catch(() => {});
       await db.incrementDailyCount(remoteJid).catch(() => {});
+      await notifyAdmins(`✅ Pedido de ${remoteJid.split('@')[0]} completado: recarga $${amount} a ${operator} (${phone}).`);
     } else {
       await sendWhatsAppMessage(remoteJid, `❌ Error: ${result?.error || 'desconocido'}. Intenta de nuevo.`);
       await db.saveTransaction({ type: 'topup', operator, phone, amount, remoteJid, status: 'error', error: result?.error }).catch(() => {});
+      await notifyAdmins(`❌ Pedido de ${remoteJid.split('@')[0]} FALLÓ (ya cobraste?): recarga $${amount} a ${operator} (${phone}).\nError: ${result?.error || 'desconocido'}`);
     }
 
   } else if (pending.type === 'bill') {
@@ -367,9 +403,11 @@ async function executeConfirmedAction(remoteJid, pending) {
       await sendImageMessage(remoteJid, path.join(__dirname, 'recaudo_resultado.png'), `Resultado ${service}`).catch(() => {});
       await db.saveTransaction({ type: 'bill', service, reference, remoteJid, status: 'success' }).catch(() => {});
       await db.incrementDailyCount(remoteJid).catch(() => {});
+      await notifyAdmins(`✅ Pedido de ${remoteJid.split('@')[0]} completado: pago ${service} (ref. ${reference}).`);
     } else {
       await sendWhatsAppMessage(remoteJid, `❌ Error: ${result?.error || 'desconocido'}. Verifica datos.`);
       await db.saveTransaction({ type: 'bill', service, reference, remoteJid, status: 'error', error: result?.error }).catch(() => {});
+      await notifyAdmins(`❌ Pedido de ${remoteJid.split('@')[0]} FALLÓ (ya cobraste?): pago ${service} (ref. ${reference}).\nError: ${result?.error || 'desconocido'}`);
     }
   }
 }
