@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS conversations (
 -- Tabla de transacciones
 CREATE TABLE IF NOT EXISTS transactions (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    type ENUM('topup', 'bill') NOT NULL,
+    type ENUM('topup', 'bill', 'order') NOT NULL,
     operator VARCHAR(50),
     phone VARCHAR(20),
     amount VARCHAR(20),

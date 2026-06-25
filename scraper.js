@@ -158,13 +158,13 @@ async function sellTopup(operator, phone, amount) {
         // (no bajo "Paquetes", "Internacionales" ni "Planes", que también
         // pueden contener coincidencias con el mismo nombre de operador).
         const recargasHeading = page.locator('h2', { hasText: 'Recargas' }).first();
-        const foundRecargas = await recargasHeading.isVisible({ timeout: 8000 }).catch(() => false);
+        const foundRecargas = await recargasHeading.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
         if (!foundRecargas) {
             throw new Error(`No encontré la operadora "${operator}" en Recargas. Verifica el nombre (ej. Claro, Movistar, CNT, Tuenti, Akimovil, Maxiplus).`);
         }
         const recargasSection = recargasHeading.locator('xpath=following-sibling::*[1]');
         const operatorItem = recargasSection.locator('.item, [class*="item"]', { hasText: operator }).first();
-        const foundOperator = await operatorItem.isVisible({ timeout: 8000 }).catch(() => false);
+        const foundOperator = await operatorItem.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
         if (!foundOperator) {
             throw new Error(`No encontré la operadora "${operator}" en Recargas. Verifica el nombre (ej. Claro, Movistar, CNT, Tuenti, Akimovil, Maxiplus).`);
         }
@@ -191,7 +191,7 @@ async function sellTopup(operator, phone, amount) {
 
         // Botón final "Vender recarga"
         const sellBtn = page.getByRole('button', { name: /Vender recarga/i });
-        if (await sellBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        if (await sellBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
             await sellBtn.click();
             console.log('   ✅ Click en botón de venta');
             await page.waitForTimeout(2000);
@@ -199,7 +199,7 @@ async function sellTopup(operator, phone, amount) {
 
         // Confirmación final si aparece
         const confirmBtn = page.getByText(/Confirmar|Realizar venta|Sí|Aceptar|OK/i).first();
-        if (await confirmBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        if (await confirmBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
             await confirmBtn.click();
             console.log('   ✅ Confirmación final');
             await page.waitForTimeout(2000);
@@ -269,7 +269,7 @@ async function payBill(serviceName, reference, { confirm = false } = {}) {
         await page.waitForTimeout(1500);
 
         const serviceOption = page.locator('.item, [class*="item"]', { hasText: serviceName }).first();
-        const foundService = await serviceOption.isVisible({ timeout: 8000 }).catch(() => false);
+        const foundService = await serviceOption.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
         if (!foundService) {
             throw new Error(`No encontré el servicio "${serviceName}" en bemovil. Intenta con el nombre completo (ej. "Registro Civil" en vez de "Reg. Civil", "CNEL Guayaquil" en vez de solo "CNEL").`);
         }
@@ -281,7 +281,7 @@ async function payBill(serviceName, reference, { confirm = false } = {}) {
         // Contrato, Cédula, etc.), así que si no hay un label conocido caemos
         // al primer input de texto visible del formulario "Realizar venta".
         let refInput = page.getByLabel(/Nro Cuenta|Contrato|Cédula|Cedula|Referencia/i).first();
-        if (!(await refInput.isVisible({ timeout: 3000 }).catch(() => false))) {
+        if (!(await refInput.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false))) {
             refInput = page.locator('input[type="text"], input[type="number"], input[type="tel"]').first();
         }
         await refInput.click({ force: true });
@@ -320,7 +320,7 @@ async function payBill(serviceName, reference, { confirm = false } = {}) {
         // "Si, realizar venta" en bemovil NO lleva tilde en "Si" (a diferencia
         // de lo esperable en español correcto) — no depender del acento.
         const confirmBtn = page.getByRole('button', { name: /realizar venta|Confirmar pago|Confirmar venta|^Pagar$/i }).first();
-        const hasPayBtn = await confirmBtn.isVisible({ timeout: 1500 }).catch(() => false);
+        const hasPayBtn = await confirmBtn.waitFor({ state: 'visible', timeout: 1500 }).then(() => true).catch(() => false);
 
         if (newBanners.length > 0 && !hasPayBtn) {
             const msg = newBanners.join(' / ').trim();
@@ -357,7 +357,7 @@ async function payBill(serviceName, reference, { confirm = false } = {}) {
         // se completó (quedó atascado mostrando el motivo del rechazo, ej.
         // "No dispone de suficiente saldo"). Solo si el modal se cerró
         // asumimos que la venta avanzó.
-        const modalStillOpen = await confirmModal.isVisible({ timeout: 2000 }).catch(() => false);
+        const modalStillOpen = await confirmModal.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
         if (modalStillOpen) {
             const rejectionText = await confirmModal.innerText().catch(() => 'El pago no se completó (el modal de confirmación no se cerró).');
             console.log(`   ❌ Resultado del pago: ${rejectionText}`);
@@ -433,12 +433,12 @@ async function processOrder(productQuery, opts = {}) {
         let scope = page;
         if (categoryHint) {
             const heading = page.locator('h2', { hasText: categoryHint }).first();
-            const foundHeading = await heading.isVisible({ timeout: 5000 }).catch(() => false);
+            const foundHeading = await heading.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
             if (foundHeading) scope = heading.locator('xpath=following-sibling::*[1]');
         }
 
         const productItem = scope.locator('.item, [class*="item"]', { hasText: productQuery }).first();
-        const foundProduct = await productItem.isVisible({ timeout: 8000 }).catch(() => false);
+        const foundProduct = await productItem.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
         if (!foundProduct) {
             throw new Error(`No encontré "${productQuery}" en bemovil. Verifica el nombre exacto.`);
         }
@@ -459,7 +459,7 @@ async function processOrder(productQuery, opts = {}) {
                 return { success: false, needsTierChoice: true, tierOptions, error: 'Hay varias opciones disponibles, falta elegir cuál.' };
             }
             const tierItem = tierModal.locator('.item, [class*="item"]', { hasText: tierChoice }).first();
-            const foundTier = await tierItem.isVisible({ timeout: 3000 }).catch(() => false);
+            const foundTier = await tierItem.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
             if (!foundTier) {
                 return { success: false, needsTierChoice: true, tierOptions, error: `No encontré la opción "${tierChoice}".` };
             }
@@ -555,7 +555,7 @@ async function processOrder(productQuery, opts = {}) {
         // Igual que en payBill: bemovil suele mostrar un modal "Confirmar
         // venta" antes de cobrar de verdad, sin importar el botón inicial.
         const confirmBtn = page.getByRole('button', { name: /realizar venta|Confirmar pago|Confirmar venta|^Pagar$/i }).first();
-        const hasConfirmModal = await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false);
+        const hasConfirmModal = await confirmBtn.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
 
         if (hasConfirmModal) {
             if (newBanners.length > 0) throw new Error(newBanners.join(' / ').trim());
@@ -572,7 +572,7 @@ async function processOrder(productQuery, opts = {}) {
             await page.waitForTimeout(3000);
             await page.screenshot({ path: 'order_resultado.png', fullPage: true });
 
-            const modalStillOpen = await confirmModal.isVisible({ timeout: 2000 }).catch(() => false);
+            const modalStillOpen = await confirmModal.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
             if (modalStillOpen) {
                 const rejectionText = await confirmModal.innerText().catch(() => 'El pago no se completó.');
                 throw new Error(rejectionText.split('\n').find(l => l && !details.includes(l)) || rejectionText);

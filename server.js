@@ -141,14 +141,23 @@ async function analyzeIntent(userMessage, context) {
     'Si bemovil no encuentra el servicio exacto al procesarlo, el sistema avisará con un error pidiendo el nombre completo.',
     '',
     'IMPORTANTE - "bill" SOLO sirve para servicios de UNA sola referencia a consultar (agua, luz, telefonia, SRI, registro civil, transito, bancos-cobranza).',
-    'NO uses "bill" para: depositos bancarios, paquetes de datos, recargas de juegos/pines, apuestas/pronosticos, loteria, TV/streaming, retiros.',
-    'Esos casos son intent "unknown": responde que ese servicio no está disponible por este medio todavía.',
     '',
-    'JSON: {"intent":"topup"|"bill"|"unknown"|"greeting", "is_complete":bool, "reply_message":"texto", "topup_data":{"operator":"nombre|null","phone":"10dig|null","amount":"numero|null"}, "bill_data":{"service":"nombre|null","reference":"numero|null"}, "missing_fields":["campos"]}',
+    'Para CUALQUIER OTRA cosa que bemovil venda (Netflix/Disney+/HBO y otras cuentas streaming, paquetes de datos,',
+    'pines/recargas de juegos como Free Fire, apuestas/pronosticos como Bet593, loteria, depositos bancarios, retiros,',
+    'paquetes internacionales) usa intent "order" con order_data:{"product_query":"nombre lo mas completo posible",',
+    '"category":"Tv Digital"|"Paquetes"|"Entretenimiento"|"Depositos"|"Pronosticos"|"Loteria"|"Retiros"|"Internacionales"|null}.',
+    'NO pidas datos para "order" todavia (ni telefono ni correo ni monto) - el sistema descubre que pedir y lo pregunta despues.',
+    'Solo extrae el nombre del producto que el usuario quiere. Si no se entiende que producto quiere, usa intent "unknown".',
     '',
-    'REGLAS: 1.Saludo=greeting 2.Recarga:operadora+telefono(10dig)+monto 3.Pago:servicio+ref 4.Si falta,is_complete=false 5.Completo(con contexto)=true 6.Tel:10dig sin +593 7.Monto:solo numeros 8."recargar" sin datos->pedir 3'
+    'JSON: {"intent":"topup"|"bill"|"order"|"unknown"|"greeting", "is_complete":bool, "reply_message":"texto", "topup_data":{"operator":"nombre|null","phone":"10dig|null","amount":"numero|null"}, "bill_data":{"service":"nombre|null","reference":"numero|null"}, "order_data":{"product_query":"nombre|null","category":"nombre|null"}, "missing_fields":["campos"]}',
+    '',
+    'REGLAS: 1.Saludo=greeting 2.Recarga:operadora+telefono(10dig)+monto 3.Pago:servicio+ref 4.Otro producto=order(solo product_query) 5.Si falta,is_complete=false 6.Completo(con contexto)=true 7.Tel:10dig sin +593 8.Monto:solo numeros 9."recargar" sin datos->pedir 3'
   ].join('\n');
 
+  return callDeepSeek(systemPrompt, userMessage);
+}
+
+async function callDeepSeek(systemPrompt, userMessage) {
   try {
     const response = await axios.post('https://api.deepseek.com/chat/completions', {
       model: 'deepseek-chat',
@@ -174,6 +183,36 @@ async function analyzeIntent(userMessage, context) {
 }
 
 // ============================================
+// IA PARA PEDIDOS GENERICOS ("order") — prompts dinamicos construidos a
+// partir de lo que processOrder() descubrio en vivo en bemovil (planes
+// reales, labels reales de los campos), no de una lista fija.
+// ============================================
+
+async function analyzeTierChoice(productQuery, tierOptions, userMessage) {
+  const systemPrompt = [
+    `El cliente quiere "${productQuery}" y debe elegir UNA de estas opciones reales de bemovil:`,
+    tierOptions.map((t, i) => `${i + 1}. ${t}`).join('\n'),
+    '',
+    'Identifica cuál eligió (puede mencionar el precio, el nombre o el número de la lista).',
+    'RESPONDE SOLO JSON: {"tierChoice": "<copia EXACTA de la opción elegida, tal cual aparece arriba>"|null, "reply_message": "texto"}',
+    'Si no quedó claro cuál eligió, tierChoice debe ser null y reply_message debe volver a mostrar las opciones.'
+  ].join('\n');
+  return callDeepSeek(systemPrompt, userMessage);
+}
+
+async function analyzeOrderFields(productQuery, requiredFields, knownSoFar, userMessage) {
+  const systemPrompt = [
+    `Estás ayudando a completar un pedido de "${productQuery}" en WhatsApp.`,
+    `El sistema pide EXACTAMENTE estos campos (usa estos nombres tal cual, son los labels reales de bemovil): ${requiredFields.join(', ')}.`,
+    `Ya se conoce: ${JSON.stringify(knownSoFar)}`,
+    'Extrae del mensaje del usuario los valores para los campos que falten. Usa EXACTAMENTE esos nombres de campo como claves del objeto "fields".',
+    'No inventes valores ni pidas datos que no estén en la lista de campos.',
+    'RESPONDE SOLO JSON: {"fields": {"<nombre campo>": "valor"|null}, "reply_message": "texto pidiendo lo que falte, usando los nombres de campo reales"}'
+  ].join('\n');
+  return callDeepSeek(systemPrompt, userMessage);
+}
+
+// ============================================
 // CONTEXTO (BD + Memoria)
 // ============================================
 
@@ -194,6 +233,18 @@ async function getContext(remoteJid) {
 async function saveContext(remoteJid, context) {
   await db.saveConversation(remoteJid, context).catch(() => {});
   memoryConversations.set(remoteJid, { context, lastMessage: Date.now() });
+}
+
+// La IA a veces "olvida" datos ya conocidos y los devuelve en null en el
+// mismo turno (confirmado en pruebas reales) — un merge ingenuo
+// {...viejo, ...nuevo} borraría el dato bueno con ese null. Por eso solo
+// sobreescribimos con valores no vacíos.
+function mergeNonEmpty(base, incoming) {
+  const merged = { ...(base || {}) };
+  for (const [k, v] of Object.entries(incoming || {})) {
+    if (v !== null && v !== undefined && v !== '') merged[k] = v;
+  }
+  return merged;
 }
 
 async function deleteContext(remoteJid) {
@@ -238,6 +289,14 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
+    // Si hay un pedido genérico ("order") a medio completar (elegir plan o
+    // dar los campos que bemovil pide), este mensaje sigue ese flujo en vez
+    // de re-clasificar la intención desde cero.
+    if (context.pendingOrder) {
+      await handlePendingOrder(remoteJid, message.trim(), context);
+      return;
+    }
+
     const aiResponse = await analyzeIntent(message, context);
     if (!aiResponse) {
       await sendWhatsAppMessage(remoteJid, '⚠️ Error interno. Intenta de nuevo.');
@@ -256,18 +315,17 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    // Actualizar contexto. La IA a veces "olvida" datos ya conocidos y los
-    // devuelve en null en el mismo turno (confirmado en pruebas reales) — un
-    // merge ingenuo {...viejo, ...nuevo} borraría el dato bueno con ese null.
-    // Por eso solo sobreescribimos con valores no vacíos.
-    function mergeNonEmpty(base, incoming) {
-      const merged = { ...(base || {}) };
-      for (const [k, v] of Object.entries(incoming || {})) {
-        if (v !== null && v !== undefined && v !== '') merged[k] = v;
+    if (aiResponse.intent === 'order') {
+      const productQuery = aiResponse.order_data?.product_query;
+      if (!productQuery) {
+        await sendWhatsAppMessage(remoteJid, aiResponse.reply_message || '¿Qué producto deseas?');
+        return;
       }
-      return merged;
+      await startOrder(remoteJid, productQuery, aiResponse.order_data?.category || null);
+      return;
     }
 
+    // Actualizar contexto.
     const newContext = { ...context, intent: aiResponse.intent };
     if (aiResponse.topup_data) newContext.topup_data = mergeNonEmpty(newContext.topup_data, aiResponse.topup_data);
     if (aiResponse.bill_data) newContext.bill_data = mergeNonEmpty(newContext.bill_data, aiResponse.bill_data);
@@ -397,6 +455,142 @@ async function handlePendingConfirmation(remoteJid, text, context) {
   await deleteContext(remoteJid);
 }
 
+// ============================================
+// PEDIDOS GENÉRICOS ("order") — cualquier categoría que sellTopup/payBill
+// no cubren. processOrder() descubre en vivo qué pedir (plan/tiers y
+// campos reales), así que la conversación se adapta dinámicamente en vez
+// de seguir un guion fijo por categoría.
+// ============================================
+
+async function startOrder(remoteJid, productQuery, category) {
+  console.log(`[ORDER] Inspeccionando "${productQuery}"...`);
+  const result = await scraper.processOrder(productQuery, { categoryHint: category, dryRun: true });
+
+  if (!result.success && result.needsTierChoice) {
+    await saveContext(remoteJid, {
+      pendingOrder: { stage: 'need_tier', productQuery, category, tierOptions: result.tierOptions }
+    });
+    await sendWhatsAppMessage(
+      remoteJid,
+      `Para *${productQuery}* hay varias opciones:\n\n${result.tierOptions.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n¿Cuál deseas? (responde el número, nombre o precio, o escribe *cancelar*)`
+    );
+    return;
+  }
+
+  if (!result.success) {
+    await sendWhatsAppMessage(remoteJid, `❌ ${result.error || 'No encontré ese producto.'}`);
+    return;
+  }
+
+  // dryRun exitoso: ya sabemos los campos reales que bemovil pide.
+  await saveContext(remoteJid, {
+    pendingOrder: {
+      stage: 'need_fields',
+      productQuery, category,
+      requiredFields: result.requiredFields,
+      fields: {}
+    }
+  });
+  await sendWhatsAppMessage(
+    remoteJid,
+    `Para *${productQuery}* necesito: ${result.requiredFields.join(', ')}.\n\nEnvíalos en tu próximo mensaje, o escribe *cancelar*.`
+  );
+}
+
+async function handlePendingOrder(remoteJid, text, context) {
+  const pending = context.pendingOrder;
+
+  if (text.toLowerCase() === 'cancelar') {
+    await sendWhatsAppMessage(remoteJid, '🚫 Pedido cancelado.');
+    await deleteContext(remoteJid);
+    return;
+  }
+
+  if (pending.stage === 'need_tier') {
+    const aiResponse = await analyzeTierChoice(pending.productQuery, pending.tierOptions, text);
+    if (!aiResponse?.tierChoice) {
+      await sendWhatsAppMessage(remoteJid, aiResponse?.reply_message || '¿Cuál opción eliges? Responde el número, nombre o precio.');
+      return;
+    }
+
+    // Segunda inspección, ahora con el plan elegido, para descubrir los
+    // campos que aparecen DESPUÉS de elegir (suelen ser los mismos para
+    // cualquier plan del mismo producto, pero los descubrimos en vivo igual).
+    const result = await scraper.processOrder(pending.productQuery, {
+      categoryHint: pending.category,
+      tierChoice: aiResponse.tierChoice,
+      dryRun: true
+    });
+
+    if (!result.success) {
+      await sendWhatsAppMessage(remoteJid, `❌ ${result.error || 'No pude continuar con esa opción.'}`);
+      return;
+    }
+
+    await saveContext(remoteJid, {
+      pendingOrder: {
+        stage: 'need_fields',
+        productQuery: pending.productQuery, category: pending.category,
+        tierChoice: aiResponse.tierChoice,
+        requiredFields: result.requiredFields,
+        fields: {}
+      }
+    });
+    await sendWhatsAppMessage(
+      remoteJid,
+      `✅ ${aiResponse.tierChoice}\n\nAhora necesito: ${result.requiredFields.join(', ')}.\n\nEnvíalos en tu próximo mensaje, o escribe *cancelar*.`
+    );
+    return;
+  }
+
+  if (pending.stage === 'need_fields') {
+    const aiResponse = await analyzeOrderFields(pending.productQuery, pending.requiredFields, pending.fields, text);
+    if (!aiResponse) {
+      await sendWhatsAppMessage(remoteJid, '⚠️ Error interno. Intenta de nuevo.');
+      return;
+    }
+
+    const mergedFields = mergeNonEmpty(pending.fields, aiResponse.fields);
+    const stillMissing = pending.requiredFields.filter(label => !mergedFields[label]);
+
+    if (stillMissing.length > 0) {
+      await saveContext(remoteJid, { pendingOrder: { ...pending, fields: mergedFields } });
+      await sendWhatsAppMessage(remoteJid, aiResponse.reply_message || `Todavía falta: ${stillMissing.join(', ')}.`);
+      return;
+    }
+
+    // Todos los campos están — llenar de verdad en bemovil y detenerse
+    // justo antes de cobrar (processOrder con confirm:false).
+    console.log(`[ORDER] Completando datos de "${pending.productQuery}"...`);
+    const result = await scraper.processOrder(pending.productQuery, {
+      categoryHint: pending.category,
+      tierChoice: pending.tierChoice,
+      fields: mergedFields,
+      confirm: false
+    });
+
+    if (!result.success) {
+      await sendWhatsAppMessage(remoteJid, `❌ ${result.error || 'No pude procesar el pedido.'}`);
+      await deleteContext(remoteJid);
+      return;
+    }
+
+    if (!result.pendingConfirm) {
+      // No había nada que confirmar (ej. un botón de solo-consulta como
+      // Lotería) — ya se ejecutó, no hay pago real pendiente.
+      await sendWhatsAppMessage(remoteJid, `✅ Listo!\n${(result.details || '').substring(0, 400)}`);
+      await deleteContext(remoteJid);
+      return;
+    }
+
+    await requestAdminConfirmation(remoteJid, {
+      type: 'order',
+      data: { productQuery: pending.productQuery, category: pending.category, tierChoice: pending.tierChoice, fields: mergedFields },
+      summary: result.details
+    });
+  }
+}
+
 async function executeConfirmedAction(remoteJid, pending) {
   if (pending.type === 'topup') {
     const { operator, phone, amount } = pending.data;
@@ -433,6 +627,24 @@ async function executeConfirmedAction(remoteJid, pending) {
       await sendWhatsAppMessage(remoteJid, `❌ Error: ${result?.error || 'desconocido'}. Verifica datos.`);
       await db.saveTransaction({ type: 'bill', service, reference, remoteJid, status: 'error', error: result?.error }).catch(() => {});
       await notifyAdmins(`❌ Pedido de ${remoteJid.split('@')[0]} FALLÓ (ya cobraste?): pago ${service} (ref. ${reference}).\nError: ${result?.error || 'desconocido'}`);
+    }
+
+  } else if (pending.type === 'order') {
+    const { productQuery, category, tierChoice, fields } = pending.data;
+    console.log(`[SCRAPER] Pedido confirmado ${productQuery}${tierChoice ? ` (${tierChoice})` : ''}`);
+    await sendWhatsAppMessage(remoteJid, `⏳ Procesando *${productQuery}*...`);
+    await db.saveTransaction({ type: 'order', service: productQuery, reference: tierChoice || null, remoteJid, status: 'pending' }).catch(() => {});
+
+    const result = await scraper.processOrder(productQuery, { categoryHint: category, tierChoice, fields, confirm: true });
+    if (result?.success) {
+      await sendWhatsAppMessage(remoteJid, `✅ Pedido realizado!\n📋 ${productQuery}${tierChoice ? `\n${tierChoice}` : ''}\n\nGracias 😊`);
+      await db.saveTransaction({ type: 'order', service: productQuery, reference: tierChoice || null, remoteJid, status: 'success' }).catch(() => {});
+      await db.incrementDailyCount(remoteJid).catch(() => {});
+      await notifyAdmins(`✅ Pedido de ${remoteJid.split('@')[0]} completado: ${productQuery}${tierChoice ? ` (${tierChoice})` : ''}.`);
+    } else {
+      await sendWhatsAppMessage(remoteJid, `❌ Error: ${result?.error || 'desconocido'}. Verifica datos.`);
+      await db.saveTransaction({ type: 'order', service: productQuery, reference: tierChoice || null, remoteJid, status: 'error', error: result?.error }).catch(() => {});
+      await notifyAdmins(`❌ Pedido de ${remoteJid.split('@')[0]} FALLÓ (ya cobraste?): ${productQuery}${tierChoice ? ` (${tierChoice})` : ''}.\nError: ${result?.error || 'desconocido'}`);
     }
   }
 }
