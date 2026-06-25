@@ -140,6 +140,10 @@ async function analyzeIntent(userMessage, context) {
     '(ej. usuario dice "CNEL" -> pide que aclare cuál regional, ej. "CNEL Guayaquil"; "registro civil" -> usa "Registro Civil" completo, no abreviar "Reg. Civil").',
     'Si bemovil no encuentra el servicio exacto al procesarlo, el sistema avisará con un error pidiendo el nombre completo.',
     '',
+    'IMPORTANTE - "bill" SOLO sirve para servicios de UNA sola referencia a consultar (agua, luz, telefonia, SRI, registro civil, transito, bancos-cobranza).',
+    'NO uses "bill" para: depositos bancarios, paquetes de datos, recargas de juegos/pines, apuestas/pronosticos, loteria, TV/streaming, retiros.',
+    'Esos casos son intent "unknown": responde que ese servicio no está disponible por este medio todavía.',
+    '',
     'JSON: {"intent":"topup"|"bill"|"unknown"|"greeting", "is_complete":bool, "reply_message":"texto", "topup_data":{"operator":"nombre|null","phone":"10dig|null","amount":"numero|null"}, "bill_data":{"service":"nombre|null","reference":"numero|null"}, "missing_fields":["campos"]}',
     '',
     'REGLAS: 1.Saludo=greeting 2.Recarga:operadora+telefono(10dig)+monto 3.Pago:servicio+ref 4.Si falta,is_complete=false 5.Completo(con contexto)=true 6.Tel:10dig sin +593 7.Monto:solo numeros 8."recargar" sin datos->pedir 3'
@@ -252,18 +256,39 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    // Actualizar contexto
+    // Actualizar contexto. La IA a veces "olvida" datos ya conocidos y los
+    // devuelve en null en el mismo turno (confirmado en pruebas reales) — un
+    // merge ingenuo {...viejo, ...nuevo} borraría el dato bueno con ese null.
+    // Por eso solo sobreescribimos con valores no vacíos.
+    function mergeNonEmpty(base, incoming) {
+      const merged = { ...(base || {}) };
+      for (const [k, v] of Object.entries(incoming || {})) {
+        if (v !== null && v !== undefined && v !== '') merged[k] = v;
+      }
+      return merged;
+    }
+
     const newContext = { ...context, intent: aiResponse.intent };
-    if (aiResponse.topup_data) newContext.topup_data = { ...(newContext.topup_data || {}), ...aiResponse.topup_data };
-    if (aiResponse.bill_data) newContext.bill_data = { ...(newContext.bill_data || {}), ...aiResponse.bill_data };
+    if (aiResponse.topup_data) newContext.topup_data = mergeNonEmpty(newContext.topup_data, aiResponse.topup_data);
+    if (aiResponse.bill_data) newContext.bill_data = mergeNonEmpty(newContext.bill_data, aiResponse.bill_data);
     await saveContext(remoteJid, newContext);
 
-    await sendWhatsAppMessage(remoteJid, aiResponse.reply_message);
+    // No confiamos solo en el "is_complete" que devuelve la IA (puede decir
+    // que falta un dato que en realidad ya teníamos en contexto, por el bug
+    // de arriba) — lo calculamos nosotros mismos a partir del contexto ya
+    // fusionado, que es la fuente de verdad real.
+    const topupReady = aiResponse.intent === 'topup' &&
+      !!(newContext.topup_data?.operator && newContext.topup_data?.phone && newContext.topup_data?.amount);
+    const billReady = aiResponse.intent === 'bill' &&
+      !!(newContext.bill_data?.service && newContext.bill_data?.reference);
 
-    if (!aiResponse.is_complete) return;
+    if (!topupReady && !billReady) {
+      await sendWhatsAppMessage(remoteJid, aiResponse.reply_message);
+      return;
+    }
 
-    if (aiResponse.intent === 'topup' && aiResponse.topup_data) {
-      const { operator, phone, amount } = aiResponse.topup_data;
+    if (topupReady) {
+      const { operator, phone, amount } = newContext.topup_data;
       // Las recargas no tienen un paso previo de "consultar monto": el monto
       // ya lo dio el usuario, así que pedimos el PIN directamente sobre eso.
       await requestAdminConfirmation(remoteJid, {
@@ -272,8 +297,8 @@ app.post('/webhook', async (req, res) => {
         summary: `📱 Recarga de *$${amount}* a *${operator}* (${phone})`
       });
 
-    } else if (aiResponse.intent === 'bill' && aiResponse.bill_data) {
-      const { service, reference } = aiResponse.bill_data;
+    } else if (billReady) {
+      const { service, reference } = newContext.bill_data;
       console.log(`[SCRAPER] Consultando ${service} Ref ${reference}`);
       await sendWhatsAppMessage(remoteJid, `⏳ Consultando *${service}*...`);
 
