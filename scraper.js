@@ -128,8 +128,14 @@ async function ensureLoggedIn(page) {
 // ============================================================
 
 async function sellTopup(operator, phone, amount) {
-    const { browser, context } = await launchStealthBrowser();
-    const page = await context.newPage();
+    let browser, context, page;
+    try {
+        ({ browser, context } = await launchStealthBrowser());
+        page = await context.newPage();
+    } catch (error) {
+        console.error('❌ Error al iniciar el navegador:', error.message);
+        return { success: false, error: `No se pudo iniciar el navegador: ${error.message}` };
+    }
 
     try {
         await ensureLoggedIn(page);
@@ -243,8 +249,14 @@ async function sellTopup(operator, phone, amount) {
 // confirmó el monto exacto que devolvió la consulta (ver flujo de PIN en
 // server.js).
 async function payBill(serviceName, reference, { confirm = false } = {}) {
-    const { browser, context } = await launchStealthBrowser();
-    const page = await context.newPage();
+    let browser, context, page;
+    try {
+        ({ browser, context } = await launchStealthBrowser());
+        page = await context.newPage();
+    } catch (error) {
+        console.error('❌ Error al iniciar el navegador:', error.message);
+        return { success: false, error: `No se pudo iniciar el navegador: ${error.message}` };
+    }
 
     try {
         await ensureLoggedIn(page);
@@ -410,8 +422,14 @@ function resolveFieldValue(label, fields) {
 
 async function processOrder(productQuery, opts = {}) {
     const { categoryHint, tierChoice, fields = {}, confirm = false, dryRun = false } = opts;
-    const { browser, context } = await launchStealthBrowser();
-    const page = await context.newPage();
+    let browser, context, page;
+    try {
+        ({ browser, context } = await launchStealthBrowser());
+        page = await context.newPage();
+    } catch (error) {
+        console.error('❌ Error al iniciar el navegador:', error.message);
+        return { success: false, error: `No se pudo iniciar el navegador: ${error.message}` };
+    }
 
     try {
         await ensureLoggedIn(page);

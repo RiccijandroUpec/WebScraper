@@ -256,13 +256,36 @@ async function deleteContext(remoteJid) {
 // WEBHOOK
 // ============================================
 
+async function runBillQuery(remoteJid, service, reference) {
+  console.log(`[SCRAPER] Consultando ${service} Ref ${reference}`);
+  await sendWhatsAppMessage(remoteJid, `⏳ Consultando *${service}*...`);
+
+  const result = await scraper.payBill(service, reference);
+  if (!result?.success) {
+    await sendWhatsAppMessage(remoteJid, `❌ Error: ${result?.error || 'desconocido'}. Verifica datos.`);
+    await db.saveTransaction({ type: 'bill', service, reference, remoteJid, status: 'error', error: result?.error }).catch(() => {});
+    await deleteContext(remoteJid);
+    return;
+  }
+
+  // La consulta encontró algo para pagar; el pago real solo se hace tras
+  // confirmar con PIN (puede ser dinero de terceros, ej. factura de SRI).
+  await requestAdminConfirmation(remoteJid, {
+    type: 'bill',
+    data: { service, reference },
+    summary: `📋 *${service}* (ref. ${reference})\n${(result.details || '').substring(0, 400)}`
+  });
+}
+
 app.post('/webhook', async (req, res) => {
   res.status(200).json({ status: 'ok' });
 
+  let remoteJid;
   try {
     const extracted = extractMessage(req.body);
     if (!extracted) return;
-    const { remoteJid, fromMe, text: message, timestamp } = extracted;
+    const { fromMe, text: message, timestamp } = extracted;
+    remoteJid = extracted.remoteJid;
     if (fromMe) return;
     if (isStaleMessage(timestamp)) {
       console.log(`[WEBHOOK] Ignorado (mensaje viejo) ${remoteJid}: "${message}"`);
@@ -294,6 +317,20 @@ app.post('/webhook', async (req, res) => {
     // de re-clasificar la intención desde cero.
     if (context.pendingOrder) {
       await handlePendingOrder(remoteJid, message.trim(), context);
+      return;
+    }
+
+    // Si ya estábamos a medio "bill" (con servicio elegido, solo faltaba la
+    // referencia) y el mensaje es un texto corto sin espacios (pinta de ser
+    // la referencia/cédula/contrato), la tratamos como tal directamente en
+    // vez de volver a preguntarle a la IA — DeepSeek a veces clasifica un
+    // numero suelto como intent "unknown" en vez de reconocerlo como dato
+    // pendiente del contexto, lo cual reinicia la conversación sin avisar.
+    const looksLikeReference = /^[A-Za-z0-9-]{3,20}$/.test(message.trim());
+    if (context.intent === 'bill' && context.bill_data?.service && !context.bill_data?.reference && looksLikeReference) {
+      const newContext = { ...context, bill_data: { ...context.bill_data, reference: message.trim() } };
+      await saveContext(remoteJid, newContext);
+      await runBillQuery(remoteJid, newContext.bill_data.service, newContext.bill_data.reference);
       return;
     }
 
@@ -356,28 +393,14 @@ app.post('/webhook', async (req, res) => {
       });
 
     } else if (billReady) {
-      const { service, reference } = newContext.bill_data;
-      console.log(`[SCRAPER] Consultando ${service} Ref ${reference}`);
-      await sendWhatsAppMessage(remoteJid, `⏳ Consultando *${service}*...`);
-
-      const result = await scraper.payBill(service, reference);
-      if (!result?.success) {
-        await sendWhatsAppMessage(remoteJid, `❌ Error: ${result?.error || 'desconocido'}. Verifica datos.`);
-        await db.saveTransaction({ type: 'bill', service, reference, remoteJid, status: 'error', error: result?.error }).catch(() => {});
-        await deleteContext(remoteJid);
-        return;
-      }
-
-      // La consulta encontró algo para pagar; el pago real solo se hace tras
-      // confirmar con PIN (puede ser dinero de terceros, ej. factura de SRI).
-      await requestAdminConfirmation(remoteJid, {
-        type: 'bill',
-        data: { service, reference },
-        summary: `📋 *${service}* (ref. ${reference})\n${(result.details || '').substring(0, 400)}`
-      });
+      await runBillQuery(remoteJid, newContext.bill_data.service, newContext.bill_data.reference);
     }
   } catch (err) {
     console.error('[WEBHOOK] Error:', err.message);
+    if (remoteJid) {
+      await sendWhatsAppMessage(remoteJid, '❌ Tuve un error técnico procesando tu pedido. Por favor intenta de nuevo desde el inicio.').catch(() => {});
+      await deleteContext(remoteJid).catch(() => {});
+    }
   }
 });
 

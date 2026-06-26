@@ -5,24 +5,14 @@
 # Usar imagen oficial de Node.js con Playwright
 FROM node:24-slim
 
-# Instalar dependencias necesarias para Chromium/Playwright
+# Dependencias base: Xvfb (pantalla virtual) + utilidades.
+# Las librerias de sistema que Chromium necesita (libgbm1, libnss3, etc.) las
+# instala "playwright install --with-deps" mas abajo, no se mantienen a mano
+# aqui porque una lista manual incompleta rompe el lanzamiento del navegador
+# (ej.: falto libgbm.so.1 y el scraper se caia con "browser has been closed").
 RUN apt-get update && apt-get install -y \
     wget \
     ca-certificates \
-    fonts-liberation \
-    libappindicator3-1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libgdk-pixbuf2.0-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
     xdg-utils \
     xvfb \
     xauth \
@@ -38,8 +28,8 @@ COPY package.json package-lock.json ./
 # Instalar dependencias
 RUN npm install
 
-# Instalar Chromium para Playwright
-RUN npx playwright install chromium
+# Instalar Chromium + todas sus dependencias de sistema
+RUN npx playwright install --with-deps chromium
 
 # Copiar el resto del código
 COPY . .
