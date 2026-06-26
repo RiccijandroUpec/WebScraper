@@ -44,10 +44,14 @@ RUN npx playwright install chromium
 # Copiar el resto del código
 COPY . .
 
+RUN chmod +x start.sh
+
 # Exponer puerto
 EXPOSE 3000
 
 # Comando por defecto
-# xvfb-run crea una pantalla virtual: Playwright lanza Chromium con headless:false
-# (necesario porque bemovil bloquea con HTTP 400 cuando detecta Chromium headless)
-CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1366x900x24", "node", "server.js"]
+# start.sh lanza Xvfb (pantalla virtual) manualmente antes de node: Playwright
+# usa headless:false porque bemovil bloquea con HTTP 400 cuando detecta Chromium
+# headless. No se usa xvfb-run porque su deteccion de "Xvfb listo" via SIGUSR1
+# se queda colgada en este entorno (node nunca llega a arrancar).
+CMD ["./start.sh"]
