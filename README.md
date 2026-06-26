@@ -279,9 +279,9 @@ MYSQL_PASSWORD=elige_otra_contraseña_fuerte
 docker compose up -d --build
 ```
 
-El `Dockerfile` instala `xvfb` + `xauth` y el `CMD` arranca el bot envuelto en `xvfb-run`, porque `scraper.js` necesita `headless:false` (ver sección anti-bot) y un contenedor no tiene pantalla física. `docker-compose.yml` define `shm_size: 1gb` para el contenedor del bot (Chromium necesita más `/dev/shm` que el default de Docker).
+El `Dockerfile` instala `xvfb` + `xauth` y el `CMD` corre `start.sh`, que lanza Xvfb manualmente en segundo plano antes de `node server.js` — **no usar `xvfb-run`**, se queda colgado para siempre en este entorno esperando una señal `SIGUSR1` que nunca llega (node nunca arranca, el contenedor queda "Up" sin logs). `docker-compose.yml` define `shm_size: 1gb` para el contenedor del bot (Chromium necesita más `/dev/shm` que el default de Docker).
 
-> **No probado en un build real todavía** — ver "Limitaciones Conocidas".
+> **Build verificado funcionando end-to-end el 2026-06-26** (bot + MySQL + phpMyAdmin levantados, `/health` OK, mensajes de WhatsApp recibidos y respondidos). Si el volumen `mysql_data` es de una corrida anterior con credenciales distintas a las de tu `.env` actual, MySQL rechazará la conexión (los env vars de usuario/password solo se aplican la primera vez que se crea el volumen) — en ese caso hay que `docker compose down` + `docker volume rm <proyecto>_mysql_data` + `docker compose up -d` para recrearlo limpio.
 
 ---
 
@@ -333,7 +333,9 @@ Síntoma: el QR se escanea, el celular muestra "no se puede conectar", y los log
 
 Causa: la imagen `evoapicloud/evolution-api:latest` resolvía a **v2.3.7**, que trae **Baileys 7.0.0-rc.9** (release candidate con una regresión conocida — ver issue #2437 en `EvolutionAPI/evolution-api`). La versión **v2.3.6** (Baileys rc.6) no tiene este problema.
 
-Solución aplicada: en `docker-compose-evolution.yml` se fijó la imagen a `evoapicloud/evolution-api:v2.3.6` en vez de `:latest`, y se recreó el contenedor (`docker rm -f evolution_api && docker compose -f docker-compose-evolution.yml up -d evolution_api`).
+Solución aplicada en su momento (2026-06-22): en `docker-compose-evolution.yml` se fijó la imagen a `evoapicloud/evolution-api:v2.3.6` en vez de `:latest`.
+
+> **Actualización 2026-06-26: ese mismo pin a `v2.3.6` resultó tener un bug distinto y peor — dejaba de recibir mensajes directos nuevos** (`state` seguía en `"open"`, los envíos funcionaban, pero nada entrante llegaba al webhook, sin ningún error en los logs). Se probó reiniciar el contenedor, cerrar sesión + re-escanear QR, e incluso desvincular el dispositivo desde el propio celular + QR nuevo — nada de eso lo arregló. Se descartó que fuera el número específico (se probó con un número de WhatsApp completamente distinto, mismo fallo). La solución fue volver a `:latest` (en ese momento resolvía a v2.3.7) y recrear el contenedor — las instancias ya emparejadas reconectaron solas y la recepción volvió a funcionar, sin que reapareciera el bug original del pre-key (ese bug solo afecta *parejas nuevas*, no reconexiones de sesiones ya emparejadas). **Moraleja: no asumas que el pin a `v2.3.6` sigue siendo correcto — revisa qué tag está activo actualmente en `docker-compose-evolution.yml` antes de gastar tiempo en otras hipótesis si dejan de llegar mensajes.**
 
 Nota práctica: el QR estático descargado por API (`GET /instance/connect/{instance}`) caduca en ~20-30s. Para vincular el dispositivo usar el **Manager web** (`http://localhost:8080/manager`, login con la `apikey`), que refresca el QR solo y evita falsos "no se puede conectar" por código vencido.
 
@@ -366,7 +368,9 @@ Si el `messageTimestamp` más reciente es de varios minutos atrás (anterior a t
 
 Causa: el websocket de Baileys deja de recibir eventos push de los servidores de WhatsApp aunque la conexión siga marcada como abierta (falla conocida de Baileys, no depende del código de este proyecto).
 
-Solución: `docker restart evolution_api` (~15s). La sesión/pairing no se pierde (vive en Postgres, en `evolution_db`), no hace falta volver a escanear el QR.
+Solución habitual: `docker restart evolution_api` (~15s). La sesión/pairing no se pierde (vive en Postgres, en `evolution_db`), no hace falta volver a escanear el QR.
+
+Si el restart simple NO lo arregla (sigue sin llegar nada nuevo después de reiniciar, cerrar sesión y volver a escanear QR, e incluso probando con un número distinto), el problema probablemente sea la versión de la imagen `evoapicloud/evolution-api` en sí — ver "Bug conocido: Evolution API `:latest` + Baileys RC rompe el pairing" más arriba, donde justamente el pin a `v2.3.6` causó esta misma falla de recepción y la solución fue volver a `:latest`.
 
 ### El bot no refleja cambios de código después de editar `server.js`
 
