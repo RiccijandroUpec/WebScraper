@@ -143,6 +143,11 @@ async function analyzeIntent(userMessage, context) {
     'SERVICIOS DE PAGO ("bill"): bemovil tiene cientos (agua/luz por municipio, bancos, SRI, registros, tránsito, etc).',
     'No restrinjas "service" a una lista fija: usa el nombre tal cual lo escribe el usuario, en su forma MÁS COMPLETA posible',
     '(ej. "CNEL" -> pregunta cuál regional, "CNEL Guayaquil"; "registro civil" -> usa "Registro Civil" completo, no "Reg. Civil").',
+    'IMPORTANTE: si el usuario dice un servicio GENÉRICO sin especificar la empresa/ciudad (ej. solo "agua" o "luz"), NO pongas',
+    'bill_data.service todavía — déjalo null y pregunta de qué empresa/ciudad es. Solo llena bill_data.service cuando ya sea un',
+    'nombre específico y completo (ej. "Agua Ibarra", "CNEL Guayaquil"). Si el siguiente mensaje del usuario es solo el nombre de',
+    'una ciudad/empresa (sin referencia todavía), eso es para COMPLETAR bill_data.service (ej. "agua" + "Ibarra" -> "Agua Ibarra"),',
+    'NO uses ese mensaje como bill_data.reference.',
     'Si bemovil no encuentra el servicio exacto al procesarlo, el sistema avisará pidiendo el nombre completo — no es tu responsabilidad validarlo de antemano.',
     '',
     'IMPORTANTE: "bill" es SOLO para servicios de UNA sola referencia a consultar (agua, luz, telefonía, SRI, registro civil, tránsito, cobranza bancaria).',
@@ -350,12 +355,16 @@ app.post('/webhook', async (req, res) => {
     }
 
     // Si ya estábamos a medio "bill" (con servicio elegido, solo faltaba la
-    // referencia) y el mensaje es un texto corto sin espacios (pinta de ser
-    // la referencia/cédula/contrato), la tratamos como tal directamente en
-    // vez de volver a preguntarle a la IA — DeepSeek a veces clasifica un
-    // numero suelto como intent "unknown" en vez de reconocerlo como dato
-    // pendiente del contexto, lo cual reinicia la conversación sin avisar.
-    const looksLikeReference = /^[A-Za-z0-9-]{3,20}$/.test(message.trim());
+    // referencia) y el mensaje es un texto corto sin espacios CON AL MENOS
+    // UN DÍGITO (cédula/cuenta/medidor real), lo tratamos como la referencia
+    // directamente en vez de volver a preguntarle a la IA — DeepSeek a veces
+    // clasifica un numero suelto como intent "unknown" en vez de reconocerlo
+    // como dato pendiente del contexto, lo cual reinicia la conversación sin
+    // avisar. Exigir un dígito evita el caso real donde el usuario respondía
+    // con el nombre de una ciudad (ej. "Ibarra") para ACLARAR el servicio
+    // ("Agua" -> "Agua Ibarra"), no para dar una referencia — un nombre de
+    // ciudad nunca es una referencia real de bemovil.
+    const looksLikeReference = /^(?=.*[0-9])[A-Za-z0-9-]{3,20}$/.test(message.trim());
     if (context.intent === 'bill' && context.bill_data?.service && !context.bill_data?.reference && looksLikeReference) {
       const newContext = {
         ...context,
