@@ -404,6 +404,10 @@ app.post('/webhook', async (req, res) => {
     const { fromMe, text: message, timestamp } = extracted;
     remoteJid = extracted.remoteJid;
     if (fromMe) return;
+    // Los JIDs de grupo de WhatsApp terminan en "@g.us" — el bot es para
+    // atención 1 a 1 (recargas/pagos a nombre del que escribe), no debe
+    // responder en grupos.
+    if (remoteJid?.endsWith('@g.us')) return;
     if (isStaleMessage(timestamp)) {
       console.log(`[WEBHOOK] Ignorado (mensaje viejo) ${remoteJid}: "${message}"`);
       return;
