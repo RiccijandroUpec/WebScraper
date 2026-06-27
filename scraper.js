@@ -211,6 +211,14 @@ async function sellTopup(operator, phone, amount) {
 
         await page.waitForTimeout(1000);
 
+        // Bemovil muestra avisos y errores con el mismo estilo de banner que
+        // en payBill (".message-container") — comparamos antes/después del
+        // click para detectar SOLO el banner nuevo que reacciona a la venta,
+        // en vez de adivinar con un texto fijo de "éxito"/"error" que puede
+        // no coincidir con la redacción real de bemovil.
+        const getBanners = () => page.locator('.message-container').allTextContents();
+        const bannersBefore = await getBanners().catch(() => []);
+
         // Botón final "Vender recarga"
         const sellBtn = page.getByRole('button', { name: /Vender recarga/i });
         if (await sellBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
@@ -231,21 +239,31 @@ async function sellTopup(operator, phone, amount) {
         await page.screenshot({ path: 'recarga_resultado.png', fullPage: true });
         console.log('   📸 Screenshot guardado: recarga_resultado.png');
 
-        // Intentar obtener mensaje de éxito/error
-        const successMsg = await page.getByText(/éxito|exitosa|completada|aprobada|recarga exitosa/i).first()
-            .textContent().catch(() => null);
-        const errorMsg = await page.getByText(/error|falló|rechazada|saldo insuficiente/i).first()
+        // IMPORTANTE: nunca asumir éxito por defecto cuando no se reconoce
+        // ningún mensaje — eso reportaba "recarga exitosa" en casos donde
+        // bemovil en realidad rechazó la venta (saldo insuficiente, operador
+        // equivocado) con una redacción que no coincidía con el patrón fijo
+        // de texto que se buscaba antes (confirmado en producción: reportó
+        // éxito en una recarga que debía fallar). Solo se confirma éxito con
+        // evidencia POSITIVA; cualquier otro caso es error/incierto.
+        const bannersAfter = await getBanners().catch(() => []);
+        const newBanners = bannersAfter.filter(b => !bannersBefore.includes(b));
+
+        const successMsg = await page.getByText(/recarga exitosa|venta exitosa|transacción exitosa/i).first()
             .textContent().catch(() => null);
 
         if (successMsg) {
             console.log(`   ✅ Resultado: ${successMsg.trim()}`);
-        } else if (errorMsg) {
-            console.log(`   ❌ Resultado: ${errorMsg.trim()}`);
-            throw new Error(errorMsg.trim());
+            return { success: true, details: successMsg.trim() };
         }
 
-        console.log('   ✅ Recarga finalizada exitosamente');
-        return { success: true };
+        if (newBanners.length > 0) {
+            const msg = newBanners.join(' / ').trim();
+            console.log(`   ❌ Resultado: ${msg}`);
+            throw new Error(msg);
+        }
+
+        throw new Error('No pude confirmar el resultado de la recarga (no apareció ni un mensaje de éxito ni de error). Verifica manualmente antes de confiar en este resultado.');
 
     } catch (error) {
         console.error('❌ Error durante la recarga:', error.message);
