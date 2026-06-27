@@ -588,8 +588,24 @@ async function processOrder(productQuery, opts = {}) {
             if (foundHeading) scope = heading.locator('xpath=following-sibling::*[1]');
         }
 
-        const productItem = scope.locator('.item, [class*="item"]', { hasText: productQuery }).first();
-        const foundProduct = await productItem.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
+        // El buscador de bemovil es literal (ver findBillService/payBill):
+        // si la consulta completa no coincide con ningún producto (ej. la
+        // IA extrajo "Disney plus" y el catálogo dice "Disney+"), probamos
+        // con palabras sueltas en vez de fallar directo.
+        let productItem = scope.locator('.item, [class*="item"]', { hasText: productQuery }).first();
+        let foundProduct = await productItem.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
+        if (!foundProduct) {
+            const words = productQuery.split(/\s+/).filter(w => w.length >= 3).sort((a, b) => b.length - a.length);
+            for (const word of words) {
+                await searchInput.click({ force: true });
+                await searchInput.fill('');
+                await searchInput.fill(word);
+                await page.waitForTimeout(1500);
+                productItem = scope.locator('.item, [class*="item"]', { hasText: word }).first();
+                foundProduct = await productItem.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
+                if (foundProduct) break;
+            }
+        }
         if (!foundProduct) {
             throw new Error(`No encontré "${productQuery}" en bemovil. Verifica el nombre exacto.`);
         }
