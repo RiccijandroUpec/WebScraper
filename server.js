@@ -121,50 +121,79 @@ async function sendImageMessage(remoteJid, imagePath, caption) {
 
 async function analyzeIntent(userMessage, context) {
   if (!context) context = {};
-  const contextStr = JSON.stringify(context, null, 2);
+  // El historial real de la conversación (lo que se dijo, no solo los datos
+  // ya extraídos) se manda como turnos de chat de verdad más abajo — aquí
+  // solo describimos el ESTADO estructurado actual (sin el historial, que
+  // ya va aparte, para no duplicarlo ni inflar el prompt).
+  const { history, ...structuredState } = context;
+  const contextStr = JSON.stringify(structuredState, null, 2);
 
   const systemPrompt = [
-    'Eres el asistente virtual de WhatsApp para "RickTech/Bemovil", recargas y pagos Ecuador.',
-    'Analiza el mensaje y extrae datos en JSON.',
+    'Eres el asistente virtual de WhatsApp de "RickTech/Bemovil" (recargas y pagos en Ecuador). Conversas de forma natural, no eres un formulario.',
+    'Tienes disponible el HISTORIAL REAL de los últimos mensajes de esta conversación (como turnos de chat) — úsalo para entender de qué se está hablando, igual que lo haría una persona leyendo el chat completo.',
     '',
-    'CONTEXTO ANTERIOR:',
+    'ESTADO YA EXTRAÍDO DE ESTA CONVERSACIÓN (datos confirmados hasta ahora):',
     contextStr,
     '',
-    'USA EL CONTEXTO. Si ya tiene un valor, NO LO PIDAS DE NUEVO.',
-    'Combina datos nuevos con contexto.',
-    'RESPUESTA: SOLO JSON. NADA MAS.',
+    'REGLA CLAVE DE CONTINUIDAD: si el estado ya tiene un pedido en curso (por ejemplo bill_data.service ya definido, o topup_data con algunos campos) y el último mensaje del usuario es corto, ambiguo, o no parece un saludo real ni una pregunta nueva, NO clasifiques como "greeting" ni "unknown" solo porque el texto es breve — primero revisa si ese mensaje completa razonablemente el dato que falta (ej. un número o nombre corto después de pedir la referencia). Solo usa "unknown" cuando de verdad no se entiende qué quiere el usuario NI tiene sentido como continuación de lo que estaba pendiente.',
+    'Combina los datos nuevos del mensaje con el estado ya extraído (no pidas de nuevo lo que ya está confirmado).',
+    'RESPONDE SOLO JSON, nada de texto fuera del JSON.',
     '',
     'OPERADORAS DE RECARGA (únicas válidas en bemovil): Claro, Movistar, Tuenti, CNT, Akimovil, Maxiplus.',
-    'SERVICIOS DE PAGO: bemovil tiene CIENTOS de servicios (agua/luz por municipio, bancos, SRI, registros, transito, etc).',
-    'NO restrinjas "service" a una lista fija: toma el nombre TAL CUAL lo escribe el usuario, usando el nombre MAS COMPLETO posible',
-    '(ej. usuario dice "CNEL" -> pide que aclare cuál regional, ej. "CNEL Guayaquil"; "registro civil" -> usa "Registro Civil" completo, no abreviar "Reg. Civil").',
-    'Si bemovil no encuentra el servicio exacto al procesarlo, el sistema avisará con un error pidiendo el nombre completo.',
+    'SERVICIOS DE PAGO ("bill"): bemovil tiene cientos (agua/luz por municipio, bancos, SRI, registros, tránsito, etc).',
+    'No restrinjas "service" a una lista fija: usa el nombre tal cual lo escribe el usuario, en su forma MÁS COMPLETA posible',
+    '(ej. "CNEL" -> pregunta cuál regional, "CNEL Guayaquil"; "registro civil" -> usa "Registro Civil" completo, no "Reg. Civil").',
+    'Si bemovil no encuentra el servicio exacto al procesarlo, el sistema avisará pidiendo el nombre completo — no es tu responsabilidad validarlo de antemano.',
     '',
-    'IMPORTANTE - "bill" SOLO sirve para servicios de UNA sola referencia a consultar (agua, luz, telefonia, SRI, registro civil, transito, bancos-cobranza).',
+    'IMPORTANTE: "bill" es SOLO para servicios de UNA sola referencia a consultar (agua, luz, telefonía, SRI, registro civil, tránsito, cobranza bancaria).',
+    'Para CUALQUIER OTRA cosa que bemovil venda (Netflix/Disney+/HBO y otras cuentas streaming, paquetes de datos, pines de juegos como Free Fire,',
+    'apuestas/pronósticos como Bet593, lotería, depósitos bancarios, retiros, paquetes internacionales) usa intent "order" con',
+    'order_data:{"product_query":"nombre lo más completo posible","category":"Tv Digital"|"Paquetes"|"Entretenimiento"|"Depositos"|"Pronosticos"|"Loteria"|"Retiros"|"Internacionales"|null}.',
+    'Para "order" NO pidas todavía teléfono, correo ni monto — el sistema descubre qué pedir y lo pregunta después. Solo extrae el nombre del producto.',
     '',
-    'Para CUALQUIER OTRA cosa que bemovil venda (Netflix/Disney+/HBO y otras cuentas streaming, paquetes de datos,',
-    'pines/recargas de juegos como Free Fire, apuestas/pronosticos como Bet593, loteria, depositos bancarios, retiros,',
-    'paquetes internacionales) usa intent "order" con order_data:{"product_query":"nombre lo mas completo posible",',
-    '"category":"Tv Digital"|"Paquetes"|"Entretenimiento"|"Depositos"|"Pronosticos"|"Loteria"|"Retiros"|"Internacionales"|null}.',
-    'NO pidas datos para "order" todavia (ni telefono ni correo ni monto) - el sistema descubre que pedir y lo pregunta despues.',
-    'Solo extrae el nombre del producto que el usuario quiere. Si no se entiende que producto quiere, usa intent "unknown".',
+    'JSON: {"intent":"topup"|"bill"|"order"|"unknown"|"greeting", "is_complete":bool, "reply_message":"texto natural y breve", "topup_data":{"operator":"nombre|null","phone":"10dig|null","amount":"numero|null"}, "bill_data":{"service":"nombre|null","reference":"numero|null"}, "order_data":{"product_query":"nombre|null","category":"nombre|null"}, "missing_fields":["campos"]}',
     '',
-    'JSON: {"intent":"topup"|"bill"|"order"|"unknown"|"greeting", "is_complete":bool, "reply_message":"texto", "topup_data":{"operator":"nombre|null","phone":"10dig|null","amount":"numero|null"}, "bill_data":{"service":"nombre|null","reference":"numero|null"}, "order_data":{"product_query":"nombre|null","category":"nombre|null"}, "missing_fields":["campos"]}',
-    '',
-    'REGLAS: 1.Saludo=greeting 2.Recarga:operadora+telefono(10dig)+monto 3.Pago:servicio+ref 4.Otro producto=order(solo product_query) 5.Si falta,is_complete=false 6.Completo(con contexto)=true 7.Tel:10dig sin +593 8.Monto:solo numeros 9."recargar" sin datos->pedir 3'
+    'Reglas rápidas: saludo real (sin ningún pedido en curso) = greeting. Recarga necesita operadora+teléfono(10 dígitos)+monto. Pago de servicio necesita servicio+referencia. Cualquier otro producto = order (solo el nombre). Si falta algo, is_complete=false. Teléfono: 10 dígitos sin +593. Monto: solo números.'
   ].join('\n');
 
-  return callDeepSeek(systemPrompt, userMessage);
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...(history || []),
+    { role: 'user', content: userMessage }
+  ];
+
+  return callDeepSeekMessages(messages);
+}
+
+// Mantiene los últimos turnos REALES de la conversación (lo que se dijo, no
+// solo los datos extraídos) para que la IA tenga memoria conversacional de
+// verdad en el siguiente turno, en vez de re-interpretar cada mensaje aislado.
+const MAX_HISTORY_TURNS = 12;
+function pushHistory(context, role, content) {
+  const history = [...(context.history || []), { role, content }];
+  return history.slice(-MAX_HISTORY_TURNS);
+}
+
+// Helper de conveniencia: agrega el turno del usuario y la respuesta del
+// bot al historial de una sola vez, para no repetir el doble pushHistory
+// en cada punto del webhook donde se responde algo.
+function withHistory(context, userMessage, assistantReply) {
+  const afterUser = pushHistory(context, 'user', userMessage);
+  return pushHistory({ history: afterUser }, 'assistant', assistantReply || '');
 }
 
 async function callDeepSeek(systemPrompt, userMessage) {
+  return callDeepSeekMessages([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userMessage }
+  ]);
+}
+
+async function callDeepSeekMessages(messages) {
   try {
     const response = await axios.post('https://api.deepseek.com/chat/completions', {
       model: 'deepseek-chat',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
-      ],
+      messages,
       temperature: 0.1,
       max_tokens: 500
     }, {
@@ -256,7 +285,7 @@ async function deleteContext(remoteJid) {
 // WEBHOOK
 // ============================================
 
-async function runBillQuery(remoteJid, service, reference) {
+async function runBillQuery(remoteJid, service, reference, history) {
   console.log(`[SCRAPER] Consultando ${service} Ref ${reference}`);
   await sendWhatsAppMessage(remoteJid, `⏳ Consultando *${service}*...`);
 
@@ -274,7 +303,7 @@ async function runBillQuery(remoteJid, service, reference) {
     type: 'bill',
     data: { service, reference },
     summary: `📋 *${service}* (ref. ${reference})\n${(result.details || '').substring(0, 400)}`
-  });
+  }, history);
 }
 
 app.post('/webhook', async (req, res) => {
@@ -328,9 +357,13 @@ app.post('/webhook', async (req, res) => {
     // pendiente del contexto, lo cual reinicia la conversación sin avisar.
     const looksLikeReference = /^[A-Za-z0-9-]{3,20}$/.test(message.trim());
     if (context.intent === 'bill' && context.bill_data?.service && !context.bill_data?.reference && looksLikeReference) {
-      const newContext = { ...context, bill_data: { ...context.bill_data, reference: message.trim() } };
+      const newContext = {
+        ...context,
+        bill_data: { ...context.bill_data, reference: message.trim() },
+        history: withHistory(context, message, `Referencia recibida: ${message.trim()}`)
+      };
       await saveContext(remoteJid, newContext);
-      await runBillQuery(remoteJid, newContext.bill_data.service, newContext.bill_data.reference);
+      await runBillQuery(remoteJid, newContext.bill_data.service, newContext.bill_data.reference, newContext.history);
       return;
     }
 
@@ -342,28 +375,53 @@ app.post('/webhook', async (req, res) => {
 
     console.log(`[AI] ${aiResponse.intent} | completo:${aiResponse.is_complete}`);
 
+    // Si la IA clasificó como saludo/desconocido pero en realidad ya había
+    // un pedido a medias (bill con servicio sin referencia, o topup con
+    // algún dato suelto), no lo tratamos como un reinicio de conversación
+    // — le recordamos puntualmente qué falta en vez del mensaje genérico.
+    const hasPendingBill = !!(context.bill_data?.service && !context.bill_data?.reference);
+    const topupPartial = context.topup_data && (context.topup_data.operator || context.topup_data.phone || context.topup_data.amount);
+    const hasPendingTopup = !!(topupPartial && !(context.topup_data.operator && context.topup_data.phone && context.topup_data.amount));
+
+    if ((aiResponse.intent === 'greeting' || aiResponse.intent === 'unknown') && (hasPendingBill || hasPendingTopup)) {
+      const reply = hasPendingBill
+        ? `Sigues con la consulta de *${context.bill_data.service}* — solo me falta la referencia/cédula/contrato. ¿La tienes, o prefieres *cancelar*?`
+        : `Sigues con tu recarga${context.topup_data.operator ? ` a *${context.topup_data.operator}*` : ''} — me falta ${[!context.topup_data.operator && 'la operadora', !context.topup_data.phone && 'el número', !context.topup_data.amount && 'el monto'].filter(Boolean).join(' y ')}. ¿Lo tienes, o prefieres *cancelar*?`;
+      await saveContext(remoteJid, { ...context, history: withHistory(context, message, reply) });
+      await sendWhatsAppMessage(remoteJid, reply);
+      return;
+    }
+
     if (aiResponse.intent === 'greeting') {
-      await sendWhatsAppMessage(remoteJid, '👋 Hola! Soy el asistente de *RickTech/BeMovil*.\n\n📱 Recargas (Claro, Movistar, CNT, Tuenti)\n💡 Pagos (CNEL, CNT, Etapa, Agua Quito)\n\nEj: "Recarga $10 a Claro 0991234567"\n¿En qué te ayudo? 😊');
+      const reply = '👋 Hola! Soy el asistente de *RickTech/BeMovil*.\n\n📱 Recargas (Claro, Movistar, CNT, Tuenti)\n💡 Pagos (CNEL, CNT, Etapa, Agua Quito)\n\nEj: "Recarga $10 a Claro 0991234567"\n¿En qué te ayudo? 😊';
+      await saveContext(remoteJid, { ...context, history: withHistory(context, message, reply) });
+      await sendWhatsAppMessage(remoteJid, reply);
       return;
     }
 
     if (aiResponse.intent === 'unknown') {
-      await sendWhatsAppMessage(remoteJid, '🤔 No entendí. Puedes pedir:\n📱 "Recarga $5 a Claro 0991234567"\n💡 "Paga CNEL cédula 1234567890"');
+      const reply = '🤔 No entendí. Puedes pedir:\n📱 "Recarga $5 a Claro 0991234567"\n💡 "Paga CNEL cédula 1234567890"';
+      await saveContext(remoteJid, { ...context, history: withHistory(context, message, reply) });
+      await sendWhatsAppMessage(remoteJid, reply);
       return;
     }
 
     if (aiResponse.intent === 'order') {
       const productQuery = aiResponse.order_data?.product_query;
+      const history = withHistory(context, message, aiResponse.reply_message || '');
       if (!productQuery) {
-        await sendWhatsAppMessage(remoteJid, aiResponse.reply_message || '¿Qué producto deseas?');
+        const reply = aiResponse.reply_message || '¿Qué producto deseas?';
+        await saveContext(remoteJid, { ...context, history });
+        await sendWhatsAppMessage(remoteJid, reply);
         return;
       }
-      await startOrder(remoteJid, productQuery, aiResponse.order_data?.category || null);
+      await startOrder(remoteJid, productQuery, aiResponse.order_data?.category || null, history);
       return;
     }
 
     // Actualizar contexto.
     const newContext = { ...context, intent: aiResponse.intent };
+    newContext.history = withHistory(context, message, aiResponse.reply_message || '');
     if (aiResponse.topup_data) newContext.topup_data = mergeNonEmpty(newContext.topup_data, aiResponse.topup_data);
     if (aiResponse.bill_data) newContext.bill_data = mergeNonEmpty(newContext.bill_data, aiResponse.bill_data);
     await saveContext(remoteJid, newContext);
@@ -390,10 +448,10 @@ app.post('/webhook', async (req, res) => {
         type: 'topup',
         data: { operator, phone, amount },
         summary: `📱 Recarga de *$${amount}* a *${operator}* (${phone})`
-      });
+      }, newContext.history);
 
     } else if (billReady) {
-      await runBillQuery(remoteJid, newContext.bill_data.service, newContext.bill_data.reference);
+      await runBillQuery(remoteJid, newContext.bill_data.service, newContext.bill_data.reference, newContext.history);
     }
   } catch (err) {
     console.error('[WEBHOOK] Error:', err.message);
@@ -439,7 +497,7 @@ async function notifyAdmins(text) {
   }
 }
 
-async function requestAdminConfirmation(remoteJid, pending) {
+async function requestAdminConfirmation(remoteJid, pending, history) {
   if (ADMIN_NUMBERS.length === 0) {
     await sendWhatsAppMessage(remoteJid, '⚠️ El sistema de pagos no está disponible en este momento. Intenta más tarde.');
     await deleteContext(remoteJid);
@@ -447,7 +505,7 @@ async function requestAdminConfirmation(remoteJid, pending) {
   }
 
   const code = generateConfirmationCode();
-  await saveContext(remoteJid, { pendingConfirmation: { ...pending, code } });
+  await saveContext(remoteJid, { pendingConfirmation: { ...pending, code }, history: history || [] });
 
   const customerPhone = remoteJid.split('@')[0];
   await notifyAdmins(
@@ -485,13 +543,14 @@ async function handlePendingConfirmation(remoteJid, text, context) {
 // de seguir un guion fijo por categoría.
 // ============================================
 
-async function startOrder(remoteJid, productQuery, category) {
+async function startOrder(remoteJid, productQuery, category, history) {
   console.log(`[ORDER] Inspeccionando "${productQuery}"...`);
   const result = await scraper.processOrder(productQuery, { categoryHint: category, dryRun: true });
 
   if (!result.success && result.needsTierChoice) {
     await saveContext(remoteJid, {
-      pendingOrder: { stage: 'need_tier', productQuery, category, tierOptions: result.tierOptions }
+      pendingOrder: { stage: 'need_tier', productQuery, category, tierOptions: result.tierOptions },
+      history
     });
     await sendWhatsAppMessage(
       remoteJid,
@@ -512,7 +571,8 @@ async function startOrder(remoteJid, productQuery, category) {
       productQuery, category,
       requiredFields: result.requiredFields,
       fields: {}
-    }
+    },
+    history
   });
   await sendWhatsAppMessage(
     remoteJid,
@@ -532,7 +592,9 @@ async function handlePendingOrder(remoteJid, text, context) {
   if (pending.stage === 'need_tier') {
     const aiResponse = await analyzeTierChoice(pending.productQuery, pending.tierOptions, text);
     if (!aiResponse?.tierChoice) {
-      await sendWhatsAppMessage(remoteJid, aiResponse?.reply_message || '¿Cuál opción eliges? Responde el número, nombre o precio.');
+      const reply = aiResponse?.reply_message || '¿Cuál opción eliges? Responde el número, nombre o precio.';
+      await saveContext(remoteJid, { pendingOrder: pending, history: withHistory(context, text, reply) });
+      await sendWhatsAppMessage(remoteJid, reply);
       return;
     }
 
@@ -550,6 +612,7 @@ async function handlePendingOrder(remoteJid, text, context) {
       return;
     }
 
+    const reply = `✅ ${aiResponse.tierChoice}\n\nAhora necesito: ${result.requiredFields.join(', ')}.\n\nEnvíalos en tu próximo mensaje, o escribe *cancelar*.`;
     await saveContext(remoteJid, {
       pendingOrder: {
         stage: 'need_fields',
@@ -557,12 +620,10 @@ async function handlePendingOrder(remoteJid, text, context) {
         tierChoice: aiResponse.tierChoice,
         requiredFields: result.requiredFields,
         fields: {}
-      }
+      },
+      history: withHistory(context, text, reply)
     });
-    await sendWhatsAppMessage(
-      remoteJid,
-      `✅ ${aiResponse.tierChoice}\n\nAhora necesito: ${result.requiredFields.join(', ')}.\n\nEnvíalos en tu próximo mensaje, o escribe *cancelar*.`
-    );
+    await sendWhatsAppMessage(remoteJid, reply);
     return;
   }
 
@@ -577,8 +638,9 @@ async function handlePendingOrder(remoteJid, text, context) {
     const stillMissing = pending.requiredFields.filter(label => !mergedFields[label]);
 
     if (stillMissing.length > 0) {
-      await saveContext(remoteJid, { pendingOrder: { ...pending, fields: mergedFields } });
-      await sendWhatsAppMessage(remoteJid, aiResponse.reply_message || `Todavía falta: ${stillMissing.join(', ')}.`);
+      const reply = aiResponse.reply_message || `Todavía falta: ${stillMissing.join(', ')}.`;
+      await saveContext(remoteJid, { pendingOrder: { ...pending, fields: mergedFields }, history: withHistory(context, text, reply) });
+      await sendWhatsAppMessage(remoteJid, reply);
       return;
     }
 
@@ -610,7 +672,7 @@ async function handlePendingOrder(remoteJid, text, context) {
       type: 'order',
       data: { productQuery: pending.productQuery, category: pending.category, tierChoice: pending.tierChoice, fields: mergedFields },
       summary: result.details
-    });
+    }, withHistory(context, text, result.details || ''));
   }
 }
 

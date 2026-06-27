@@ -70,8 +70,20 @@ async function getConversation(remoteJid) {
     [remoteJid]
   );
   if (rows && rows.length > 0) {
+    // La columna "context" es de tipo JSON en MySQL: mysql2 la devuelve ya
+    // parseada como objeto/array, no como string. Si en algún momento
+    // llegara como string (otro driver, columna TEXT en una BD vieja),
+    // igual la parseamos. Antes esto SIEMPRE intentaba JSON.parse() sobre
+    // un objeto ya parseado, lo cual lanza una excepción silenciosa
+    // (catch vacío) y reseteaba el contexto a {} en cada lectura — el bot
+    // "olvidaba" todo entre turnos aunque el guardado funcionara bien.
     let context = {};
-    try { context = JSON.parse(rows[0].context || '{}'); } catch(e) {}
+    const raw = rows[0].context;
+    if (raw && typeof raw === 'object') {
+      context = raw;
+    } else if (typeof raw === 'string') {
+      try { context = JSON.parse(raw || '{}'); } catch (e) {}
+    }
     return {
       context,
       lastMessage: new Date(rows[0].last_message).getTime()
