@@ -670,6 +670,22 @@ async function startOrder(remoteJid, productQuery, category, history) {
   console.log(`[ORDER] Inspeccionando "${productQuery}"...`);
   const result = await scraper.processOrder(productQuery, { categoryHint: category, dryRun: true });
 
+  // El buscador de bemovil es literal — si hay varios productos reales
+  // parecidos a lo que pidió el cliente, no se elige el primero en
+  // silencio (podría cobrar el plan equivocado): se le pregunta cuál es,
+  // igual que ya se hace para "bill" (ver findBillService).
+  if (!result.success && result.needsProductChoice) {
+    await saveContext(remoteJid, {
+      pendingOrder: { stage: 'need_product', productQuery, category, productOptions: result.productOptions },
+      history
+    });
+    await sendWhatsAppMessage(
+      remoteJid,
+      `Encontré varios productos parecidos a *${productQuery}*:\n\n${result.productOptions.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n¿Cuál es? (responde el número o el nombre, o escribe *cancelar*)`
+    );
+    return;
+  }
+
   if (!result.success && result.needsTierChoice) {
     await saveContext(remoteJid, {
       pendingOrder: { stage: 'need_tier', productQuery, category, tierOptions: result.tierOptions },
@@ -709,6 +725,45 @@ async function handlePendingOrder(remoteJid, text, context) {
   if (text.toLowerCase() === 'cancelar') {
     await sendWhatsAppMessage(remoteJid, '🚫 Pedido cancelado.');
     await deleteContext(remoteJid);
+    return;
+  }
+
+  if (pending.stage === 'need_product') {
+    const aiResponse = await analyzeTierChoice(pending.productQuery, pending.productOptions, text);
+    if (!aiResponse?.tierChoice) {
+      const reply = aiResponse?.reply_message || '¿Cuál de esos productos es? Responde el número o el nombre, o escribe *cancelar*.';
+      await saveContext(remoteJid, { pendingOrder: pending, history: withHistory(context, text, reply) });
+      await sendWhatsAppMessage(remoteJid, reply);
+      return;
+    }
+
+    // Ahora sí tenemos el nombre EXACTO del catálogo — se vuelve a
+    // inspeccionar con ese nombre (puede que el producto en sí también
+    // tenga planes/tiers que elegir, ej. "Netflix" -> 1 Pantalla / Completo).
+    const exactProduct = aiResponse.tierChoice;
+    const result = await scraper.processOrder(exactProduct, { categoryHint: pending.category, dryRun: true });
+
+    if (!result.success && result.needsTierChoice) {
+      const reply = `✅ ${exactProduct}\n\nHay varias opciones:\n\n${result.tierOptions.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n¿Cuál deseas? (responde el número, nombre o precio, o escribe *cancelar*)`;
+      await saveContext(remoteJid, {
+        pendingOrder: { stage: 'need_tier', productQuery: exactProduct, category: pending.category, tierOptions: result.tierOptions },
+        history: withHistory(context, text, reply)
+      });
+      await sendWhatsAppMessage(remoteJid, reply);
+      return;
+    }
+
+    if (!result.success) {
+      await sendWhatsAppMessage(remoteJid, `❌ ${result.error || 'No pude continuar con ese producto.'}`);
+      return;
+    }
+
+    const reply = `✅ ${exactProduct}\n\nNecesito: ${result.requiredFields.join(', ')}.\n\nEnvíalos en tu próximo mensaje, o escribe *cancelar*.`;
+    await saveContext(remoteJid, {
+      pendingOrder: { stage: 'need_fields', productQuery: exactProduct, category: pending.category, requiredFields: result.requiredFields, fields: {} },
+      history: withHistory(context, text, reply)
+    });
+    await sendWhatsAppMessage(remoteJid, reply);
     return;
   }
 

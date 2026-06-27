@@ -275,6 +275,75 @@ async function sellTopup(operator, phone, amount) {
 }
 
 // ============================================================
+// BÚSQUEDA EN VIVO DE PRODUCTOS (compartida entre bill y order)
+// ============================================================
+//
+// El buscador de bemovil es literal (su propio filtrado interno es difuso,
+// pero no acepta nombres con palabras en otro orden o sinónimos). Ni el
+// cliente ni la IA conocen el nombre EXACTO que bemovil usa (ej. "agua
+// ibarra" vs el real "AGUA EMAPA - IBARRA", o "Disney plus" vs "Disney+"),
+// así que en vez de adivinar buscamos en vivo y devolvemos TODAS las
+// coincidencias plausibles para que quien llama decida (usar la única, o
+// preguntarle al cliente si hay varias).
+async function searchProductCandidates(page, searchInput, query, scope = page) {
+    // El selector ".item"/[class*="item"] no es exclusivo del dropdown de
+    // resultados: también matchea navegación y chrome de toda la página
+    // (confirmado en producción: "Inicio", "Reportes", "Mis comisiones"...
+    // aparecían como "resultados"). Filtramos solo lo que de verdad
+    // contiene alguna palabra de la búsqueda, y descartamos textos muy
+    // largos (esos son secciones de la página, no nombres de producto).
+    const significantWords = query.split(/\s+/).filter(w => w.length >= 3);
+    const wordPattern = significantWords.length > 0
+        ? new RegExp(significantWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i')
+        : null;
+    const isPlausibleResult = (t) => {
+        const clean = t.trim();
+        if (!clean || clean.length > 60) return false;
+        return wordPattern ? wordPattern.test(clean) : true;
+    };
+
+    // El buscador de bemovil ya filtra de forma difusa contra lo que se
+    // escriba — probamos con la consulta completa primero, y si no aparece
+    // nada, con palabras sueltas (de más a menos significativas: las más
+    // largas primero), para no depender de que el usuario o la IA acierten
+    // el nombre completo y exacto.
+    const candidateQueries = [query, ...significantWords.filter(w => w.length >= 4).sort((a, b) => b.length - a.length)];
+    const seen = new Set();
+    let items = [];
+
+    for (const q of candidateQueries) {
+        await searchInput.click({ force: true });
+        await searchInput.fill('');
+        await searchInput.fill(q);
+        await page.waitForTimeout(1500);
+
+        const texts = await scope.locator('.item:visible, [class*="item"]:visible').allTextContents().catch(() => []);
+        for (const t of texts) {
+            const clean = t.trim();
+            if (clean && isPlausibleResult(clean) && !seen.has(clean)) { seen.add(clean); items.push(clean); }
+        }
+        if (items.length > 0) break;
+    }
+
+    if (items.length === 0) return [];
+
+    // La búsqueda que sí trajo resultados pudo haber sido solo UNA palabra
+    // (ej. "Ibarra" trae luz, agua, municipio, registro...) — si alguno de
+    // los candidatos contiene TODAS las palabras significativas originales
+    // (ej. "agua" Y "ibarra"), nos quedamos solo con esos, mucho más
+    // precisos que la lista cruda.
+    if (significantWords.length > 1) {
+        const refined = items.filter(name => {
+            const normalized = name.toLowerCase();
+            return significantWords.every(w => normalized.includes(w.toLowerCase()));
+        });
+        if (refined.length > 0) items = refined;
+    }
+
+    return items;
+}
+
+// ============================================================
 // PAGO DE SERVICIOS (payBill)
 // ============================================================
 
@@ -282,13 +351,6 @@ async function sellTopup(operator, phone, amount) {
 // el clic final de pago/venta — solo debe usarse después de que un humano
 // confirmó el monto exacto que devolvió la consulta (ver flujo de PIN en
 // server.js).
-//
-// Antes de pagar/consultar, hay que saber el nombre EXACTO que bemovil usa
-// (su buscador es literal). Ni el cliente ni la IA lo conocen de antemano
-// ("agua ibarra" vs el nombre real "AGUA EMAPA - IBARRA"), así que en vez de
-// adivinar buscamos en vivo en bemovil (su propio buscador ya filtra de forma
-// difusa) y devolvemos las coincidencias reales para que el cliente elija —
-// el mismo patrón que processOrder() ya usa para elegir planes/tiers.
 async function findBillService(query) {
     let browser, context, page;
     try {
@@ -306,62 +368,11 @@ async function findBillService(query) {
         const searchInput = page.getByLabel('Buscar producto');
         await searchInput.waitFor({ state: 'visible', timeout: 8000 });
 
-        // El selector ".item"/[class*="item"] no es exclusivo del dropdown de
-        // resultados: también matchea navegación y chrome de toda la página
-        // (confirmado en producción: "Inicio", "Reportes", "Mis comisiones"...
-        // aparecían como "resultados"). Filtramos solo lo que de verdad
-        // contiene alguna palabra de la búsqueda, y descartamos textos muy
-        // largos (esos son secciones de la página, no nombres de producto).
-        const significantWords = query.split(/\s+/).filter(w => w.length >= 3);
-        const wordPattern = significantWords.length > 0
-            ? new RegExp(significantWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i')
-            : null;
-        const isPlausibleResult = (t) => {
-            const clean = t.trim();
-            if (!clean || clean.length > 60) return false;
-            return wordPattern ? wordPattern.test(clean) : true;
-        };
-
-        // El buscador de bemovil ya filtra de forma difusa contra lo que se
-        // escriba — probamos con la consulta completa primero, y si no
-        // aparece nada, con palabras sueltas (de más a menos significativas:
-        // las más largas primero), para no depender de que el usuario o la
-        // IA acierten el nombre completo y exacto.
-        const candidateQueries = [query, ...significantWords.filter(w => w.length >= 4).sort((a, b) => b.length - a.length)];
-        const seen = new Set();
-        let items = [];
-
-        for (const q of candidateQueries) {
-            await searchInput.click({ force: true });
-            await searchInput.fill('');
-            await searchInput.fill(q);
-            await page.waitForTimeout(1500);
-
-            const texts = await page.locator('.item:visible, [class*="item"]:visible').allTextContents().catch(() => []);
-            for (const t of texts) {
-                const clean = t.trim();
-                if (clean && isPlausibleResult(clean) && !seen.has(clean)) { seen.add(clean); items.push(clean); }
-            }
-            if (items.length > 0) break;
-        }
+        const items = await searchProductCandidates(page, searchInput, query);
 
         if (items.length === 0) {
             return { success: false, error: `No encontré ningún servicio parecido a "${query}" en bemovil. Intenta con otras palabras (ej. la ciudad o la empresa exacta).` };
         }
-
-        // La búsqueda que sí trajo resultados pudo haber sido solo UNA
-        // palabra (ej. "Ibarra" trae luz, agua, municipio, registro...) —
-        // si alguno de los candidatos contiene TODAS las palabras
-        // significativas originales (ej. "agua" Y "ibarra"), nos quedamos
-        // solo con esos, mucho más precisos que la lista cruda.
-        if (significantWords.length > 1) {
-            const refined = items.filter(name => {
-                const normalized = name.toLowerCase();
-                return significantWords.every(w => normalized.includes(w.toLowerCase()));
-            });
-            if (refined.length > 0) items = refined;
-        }
-
         // Más de ~8 resultados normalmente significa que la consulta era
         // demasiado genérica (ej. solo "agua") — pedirle al cliente que
         // afine en vez de mandarle una lista enorme por WhatsApp.
@@ -577,9 +588,6 @@ async function processOrder(productQuery, opts = {}) {
         console.log(`   🔎 Buscando "${productQuery}" en el buscador de productos...`);
         const searchInput = page.getByLabel('Buscar producto');
         await searchInput.waitFor({ state: 'visible', timeout: 8000 });
-        await searchInput.click({ force: true });
-        await searchInput.fill(productQuery);
-        await page.waitForTimeout(1500);
 
         let scope = page;
         if (categoryHint) {
@@ -588,29 +596,31 @@ async function processOrder(productQuery, opts = {}) {
             if (foundHeading) scope = heading.locator('xpath=following-sibling::*[1]');
         }
 
-        // El buscador de bemovil es literal (ver findBillService/payBill):
-        // si la consulta completa no coincide con ningún producto (ej. la
-        // IA extrajo "Disney plus" y el catálogo dice "Disney+"), probamos
-        // con palabras sueltas en vez de fallar directo.
-        let productItem = scope.locator('.item, [class*="item"]', { hasText: productQuery }).first();
-        let foundProduct = await productItem.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
-        if (!foundProduct) {
-            const words = productQuery.split(/\s+/).filter(w => w.length >= 3).sort((a, b) => b.length - a.length);
-            for (const word of words) {
-                await searchInput.click({ force: true });
-                await searchInput.fill('');
-                await searchInput.fill(word);
-                await page.waitForTimeout(1500);
-                productItem = scope.locator('.item, [class*="item"]', { hasText: word }).first();
-                foundProduct = await productItem.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
-                if (foundProduct) break;
-            }
-        }
-        if (!foundProduct) {
+        // Búsqueda en vivo con respaldo de palabras sueltas (ver
+        // searchProductCandidates) — si hay más de un producto real
+        // parecido (ej. "Disney" trae varios planes/variantes), no se elige
+        // el primero en silencio: se le pregunta al cliente cuál es, igual
+        // que ya hace findBillService para "bill".
+        const candidates = await searchProductCandidates(page, searchInput, productQuery, scope);
+        if (candidates.length === 0) {
             throw new Error(`No encontré "${productQuery}" en bemovil. Verifica el nombre exacto.`);
         }
+        if (candidates.length > 1) {
+            return { success: false, needsProductChoice: true, productOptions: candidates.slice(0, 8), error: 'Hay varios productos parecidos, falta elegir cuál.' };
+        }
+
+        const productName = candidates[0];
+        await searchInput.click({ force: true });
+        await searchInput.fill('');
+        await searchInput.fill(productName);
+        await page.waitForTimeout(1500);
+        const productItem = scope.locator('.item:visible, [class*="item"]:visible', { hasText: productName }).first();
+        const foundProduct = await productItem.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
+        if (!foundProduct) {
+            throw new Error(`No encontré "${productName}" en bemovil. Verifica el nombre exacto.`);
+        }
         await productItem.click();
-        console.log(`   ✅ Producto seleccionado: ${productQuery}`);
+        console.log(`   ✅ Producto seleccionado: ${productName}`);
         await page.waitForTimeout(1500);
 
         // Paso opcional: modal "Escoger Producto" (planes/tiers con precio,
