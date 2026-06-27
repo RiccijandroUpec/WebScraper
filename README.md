@@ -133,6 +133,7 @@ Hallazgos no obvios de pruebas reales (ver también comentarios en `scraper.js`)
 | 🛍️ Cualquier otro producto | `processOrder()` genérico, verificado contra 136 productos del catálogo |
 | 🔢 Confirmación por código | Código nuevo por pedido, vía administrador |
 | 🗄️ Persistencia en MySQL | Con fallback a memoria si la BD no está disponible |
+| 🧠 Memoria conversacional real | DeepSeek recibe el historial real de la conversación (no solo datos extraídos), y reconoce continuaciones ambiguas en vez de reiniciar |
 | 🔁 Multi-turno robusto | No pierde datos entre mensajes ni reinicia la conversación con datos sueltos |
 | 📊 Dashboard | `dashboard.html` consumiendo `/stats` |
 | 🐳 Docker | Bot + MySQL + phpMyAdmin, build verificado funcionando end-to-end |
@@ -296,6 +297,7 @@ docker compose up -d --build bot
 | Login en BeMovil falla / HTTP 400 | Bot detectado como headless | Confirmar `headless:false` + Xvfb (ver sección anti-bot) |
 | Build de Docker falla/lento | Poco espacio en disco | `docker system prune`, revisar espacio libre |
 | WhatsApp no conecta / no llegan mensajes | Ver sección de Evolution API | — |
+| El bot "no recuerda" nada entre mensajes / se siente ambiguo | Con MySQL conectado, `db.js` parseaba dos veces una columna `JSON` que `mysql2` ya entrega como objeto — `JSON.parse()` fallaba en silencio y el contexto volvía `{}` en cada lectura | Ya corregido (`db.js`). Si vuelve a pasar: comparar directo lo que hay en la tabla `conversations` vs lo que devuelve `db.getConversation()` para el mismo `remote_jid` |
 
 ---
 
