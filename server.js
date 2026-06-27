@@ -290,6 +290,75 @@ async function deleteContext(remoteJid) {
 // WEBHOOK
 // ============================================
 
+// Resuelve el nombre de servicio que dio el cliente/la IA contra el nombre
+// EXACTO que usa bemovil, buscando en vivo (ver scraper.findBillService) en
+// vez de asumir que el texto extraído ya es correcto — el buscador de
+// bemovil es literal y tiene cientos de variantes regionales que ni el
+// cliente ni la IA conocen de antemano.
+async function resolveAndContinueBill(remoteJid, context, billData, message) {
+  const query = billData.service;
+  console.log(`[BILL] Resolviendo servicio "${query}" contra bemovil...`);
+  const result = await scraper.findBillService(query);
+
+  if (!result.success) {
+    await sendWhatsAppMessage(remoteJid, `❌ ${result.error}`);
+    await deleteContext(remoteJid);
+    return;
+  }
+
+  if (result.candidates.length === 1) {
+    const service = result.candidates[0];
+    if (billData.reference) {
+      const history = withHistory(context, message, `⏳ Consultando *${service}*...`);
+      await saveContext(remoteJid, { intent: 'bill', bill_data: { service, serviceConfirmed: true, reference: billData.reference }, history });
+      await runBillQuery(remoteJid, service, billData.reference, history);
+    } else {
+      const reply = `Perfecto, *${service}*. ¿Cuál es tu número de referencia (código de cliente o medidor)?`;
+      const history = withHistory(context, message, reply);
+      await saveContext(remoteJid, { intent: 'bill', bill_data: { service, serviceConfirmed: true }, history });
+      await sendWhatsAppMessage(remoteJid, reply);
+    }
+    return;
+  }
+
+  // Varias coincidencias reales — preguntarle al cliente cuál es, en vez de
+  // adivinar (mismo patrón que ya usa processOrder para elegir plan/tier).
+  const reply = `Encontré varias coincidencias para *${query}*:\n\n${result.candidates.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n\n¿Cuál es? (responde el número o el nombre, o escribe *cancelar*)`;
+  const history = withHistory(context, message, reply);
+  await saveContext(remoteJid, { pendingBillChoice: { candidates: result.candidates, reference: billData.reference || null }, history });
+  await sendWhatsAppMessage(remoteJid, reply);
+}
+
+async function handlePendingBillChoice(remoteJid, text, context) {
+  const pending = context.pendingBillChoice;
+
+  if (text.toLowerCase() === 'cancelar') {
+    await sendWhatsAppMessage(remoteJid, '🚫 Pedido cancelado.');
+    await deleteContext(remoteJid);
+    return;
+  }
+
+  const aiResponse = await analyzeTierChoice('el servicio que quieres pagar', pending.candidates, text);
+  if (!aiResponse?.tierChoice) {
+    const reply = aiResponse?.reply_message || '¿Cuál de esas opciones es? Responde el número o el nombre, o escribe *cancelar*.';
+    await saveContext(remoteJid, { pendingBillChoice: pending, history: withHistory(context, text, reply) });
+    await sendWhatsAppMessage(remoteJid, reply);
+    return;
+  }
+
+  const service = aiResponse.tierChoice;
+  if (pending.reference) {
+    const history = withHistory(context, text, `⏳ Consultando *${service}*...`);
+    await saveContext(remoteJid, { intent: 'bill', bill_data: { service, serviceConfirmed: true, reference: pending.reference }, history });
+    await runBillQuery(remoteJid, service, pending.reference, history);
+  } else {
+    const reply = `Perfecto, *${service}*. ¿Cuál es tu número de referencia (código de cliente o medidor)?`;
+    const history = withHistory(context, text, reply);
+    await saveContext(remoteJid, { intent: 'bill', bill_data: { service, serviceConfirmed: true }, history });
+    await sendWhatsAppMessage(remoteJid, reply);
+  }
+}
+
 async function runBillQuery(remoteJid, service, reference, history) {
   console.log(`[SCRAPER] Consultando ${service} Ref ${reference}`);
   await sendWhatsAppMessage(remoteJid, `⏳ Consultando *${service}*...`);
@@ -354,6 +423,13 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
+    // Si bemovil tenía varios servicios parecidos al que el cliente pidió
+    // (ver resolveAndContinueBill), este mensaje es la elección entre ellos.
+    if (context.pendingBillChoice) {
+      await handlePendingBillChoice(remoteJid, message.trim(), context);
+      return;
+    }
+
     // Si ya estábamos a medio "bill" (con servicio elegido, solo faltaba la
     // referencia) y el mensaje es un texto corto sin espacios CON AL MENOS
     // UN DÍGITO (cédula/cuenta/medidor real), lo tratamos como la referencia
@@ -365,7 +441,7 @@ app.post('/webhook', async (req, res) => {
     // ("Agua" -> "Agua Ibarra"), no para dar una referencia — un nombre de
     // ciudad nunca es una referencia real de bemovil.
     const looksLikeReference = /^(?=.*[0-9])[A-Za-z0-9-]{3,20}$/.test(message.trim());
-    if (context.intent === 'bill' && context.bill_data?.service && !context.bill_data?.reference && looksLikeReference) {
+    if (context.intent === 'bill' && context.bill_data?.serviceConfirmed && !context.bill_data?.reference && looksLikeReference) {
       const newContext = {
         ...context,
         bill_data: { ...context.bill_data, reference: message.trim() },
@@ -388,7 +464,7 @@ app.post('/webhook', async (req, res) => {
     // un pedido a medias (bill con servicio sin referencia, o topup con
     // algún dato suelto), no lo tratamos como un reinicio de conversación
     // — le recordamos puntualmente qué falta en vez del mensaje genérico.
-    const hasPendingBill = !!(context.bill_data?.service && !context.bill_data?.reference);
+    const hasPendingBill = !!(context.bill_data?.serviceConfirmed && !context.bill_data?.reference);
     const topupPartial = context.topup_data && (context.topup_data.operator || context.topup_data.phone || context.topup_data.amount);
     const hasPendingTopup = !!(topupPartial && !(context.topup_data.operator && context.topup_data.phone && context.topup_data.amount));
 
@@ -430,9 +506,29 @@ app.post('/webhook', async (req, res) => {
 
     // Actualizar contexto.
     const newContext = { ...context, intent: aiResponse.intent };
-    newContext.history = withHistory(context, message, aiResponse.reply_message || '');
     if (aiResponse.topup_data) newContext.topup_data = mergeNonEmpty(newContext.topup_data, aiResponse.topup_data);
-    if (aiResponse.bill_data) newContext.bill_data = mergeNonEmpty(newContext.bill_data, aiResponse.bill_data);
+    if (aiResponse.bill_data) {
+      const merged = mergeNonEmpty(newContext.bill_data, aiResponse.bill_data);
+      // Si el servicio cambió de valor respecto al ya confirmado (el usuario
+      // se corrigió o cambió de idea), hay que volver a resolverlo contra
+      // bemovil — no heredar el "ya confirmado" del servicio anterior.
+      if (aiResponse.bill_data.service && aiResponse.bill_data.service !== context.bill_data?.service) {
+        merged.serviceConfirmed = false;
+      }
+      newContext.bill_data = merged;
+    }
+
+    // El buscador de bemovil es literal: ni el cliente ni la IA conocen el
+    // nombre EXACTO del servicio (ej. "agua ibarra" vs el real "AGUA EMAPA -
+    // IBARRA"). Antes de pedir la referencia, resolvemos el nombre en vivo
+    // contra bemovil (ver resolveAndContinueBill) en vez de asumir que el
+    // texto extraído ya es correcto.
+    if (aiResponse.intent === 'bill' && newContext.bill_data?.service && !newContext.bill_data?.serviceConfirmed) {
+      await resolveAndContinueBill(remoteJid, context, newContext.bill_data, message);
+      return;
+    }
+
+    newContext.history = withHistory(context, message, aiResponse.reply_message || '');
     await saveContext(remoteJid, newContext);
 
     // No confiamos solo en el "is_complete" que devuelve la IA (puede decir
@@ -442,7 +538,7 @@ app.post('/webhook', async (req, res) => {
     const topupReady = aiResponse.intent === 'topup' &&
       !!(newContext.topup_data?.operator && newContext.topup_data?.phone && newContext.topup_data?.amount);
     const billReady = aiResponse.intent === 'bill' &&
-      !!(newContext.bill_data?.service && newContext.bill_data?.reference);
+      !!(newContext.bill_data?.serviceConfirmed && newContext.bill_data?.reference);
 
     if (!topupReady && !billReady) {
       await sendWhatsAppMessage(remoteJid, aiResponse.reply_message);

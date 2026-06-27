@@ -117,14 +117,18 @@ async function ensureLoggedIn(page) {
         // bemovil es una SPA: cuando la sesión caducó, la URL sigue mostrando
         // /backoffice/sell (el guard de ruta renderiza el login SIN navegar
         // a otra URL), así que checar page.url() no detecta una sesión
-        // muerta — confirmado en producción: pasaba este chequeo y luego el
-        // scraper se colgaba 8s esperando "Buscar producto" en lo que en
-        // realidad era la pantalla de login. Verificamos el elemento real.
-        const sessionValid = await page.getByLabel('Buscar producto')
-            .waitFor({ state: 'visible', timeout: 5000 })
+        // muerta. Tampoco basta con buscar "Buscar producto" visible: la
+        // barra de navegación (Inicio, Reportes, etc.) y el campo de
+        // búsqueda existen en el layout general del sitio incluso SIN
+        // sesión válida (confirmado en producción: ambos chequeos pasaban a
+        // la vez que el botón "Continuar" del login seguía visible). La
+        // señal inequívoca es la AUSENCIA del botón "Continuar" del primer
+        // paso del login (mismo botón que usa login() más arriba).
+        const loginFormVisible = await page.getByRole('button', { name: 'Continuar' })
+            .waitFor({ state: 'visible', timeout: 4000 })
             .then(() => true)
             .catch(() => false);
-        if (sessionValid) {
+        if (!loginFormVisible) {
             console.log('[LOGIN] Sesión reutilizada, sin necesidad de login.');
             return;
         }
@@ -260,6 +264,101 @@ async function sellTopup(operator, phone, amount) {
 // el clic final de pago/venta — solo debe usarse después de que un humano
 // confirmó el monto exacto que devolvió la consulta (ver flujo de PIN en
 // server.js).
+//
+// Antes de pagar/consultar, hay que saber el nombre EXACTO que bemovil usa
+// (su buscador es literal). Ni el cliente ni la IA lo conocen de antemano
+// ("agua ibarra" vs el nombre real "AGUA EMAPA - IBARRA"), así que en vez de
+// adivinar buscamos en vivo en bemovil (su propio buscador ya filtra de forma
+// difusa) y devolvemos las coincidencias reales para que el cliente elija —
+// el mismo patrón que processOrder() ya usa para elegir planes/tiers.
+async function findBillService(query) {
+    let browser, context, page;
+    try {
+        ({ browser, context } = await launchStealthBrowser());
+        page = await context.newPage();
+    } catch (error) {
+        console.error('❌ Error al iniciar el navegador:', error.message);
+        return { success: false, error: `No se pudo iniciar el navegador: ${error.message}` };
+    }
+
+    try {
+        await ensureLoggedIn(page);
+        await page.waitForTimeout(2000);
+
+        const searchInput = page.getByLabel('Buscar producto');
+        await searchInput.waitFor({ state: 'visible', timeout: 8000 });
+
+        // El selector ".item"/[class*="item"] no es exclusivo del dropdown de
+        // resultados: también matchea navegación y chrome de toda la página
+        // (confirmado en producción: "Inicio", "Reportes", "Mis comisiones"...
+        // aparecían como "resultados"). Filtramos solo lo que de verdad
+        // contiene alguna palabra de la búsqueda, y descartamos textos muy
+        // largos (esos son secciones de la página, no nombres de producto).
+        const significantWords = query.split(/\s+/).filter(w => w.length >= 3);
+        const wordPattern = significantWords.length > 0
+            ? new RegExp(significantWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i')
+            : null;
+        const isPlausibleResult = (t) => {
+            const clean = t.trim();
+            if (!clean || clean.length > 60) return false;
+            return wordPattern ? wordPattern.test(clean) : true;
+        };
+
+        // El buscador de bemovil ya filtra de forma difusa contra lo que se
+        // escriba — probamos con la consulta completa primero, y si no
+        // aparece nada, con palabras sueltas (de más a menos significativas:
+        // las más largas primero), para no depender de que el usuario o la
+        // IA acierten el nombre completo y exacto.
+        const candidateQueries = [query, ...significantWords.filter(w => w.length >= 4).sort((a, b) => b.length - a.length)];
+        const seen = new Set();
+        let items = [];
+
+        for (const q of candidateQueries) {
+            await searchInput.click({ force: true });
+            await searchInput.fill('');
+            await searchInput.fill(q);
+            await page.waitForTimeout(1500);
+
+            const texts = await page.locator('.item:visible, [class*="item"]:visible').allTextContents().catch(() => []);
+            for (const t of texts) {
+                const clean = t.trim();
+                if (clean && isPlausibleResult(clean) && !seen.has(clean)) { seen.add(clean); items.push(clean); }
+            }
+            if (items.length > 0) break;
+        }
+
+        if (items.length === 0) {
+            return { success: false, error: `No encontré ningún servicio parecido a "${query}" en bemovil. Intenta con otras palabras (ej. la ciudad o la empresa exacta).` };
+        }
+
+        // La búsqueda que sí trajo resultados pudo haber sido solo UNA
+        // palabra (ej. "Ibarra" trae luz, agua, municipio, registro...) —
+        // si alguno de los candidatos contiene TODAS las palabras
+        // significativas originales (ej. "agua" Y "ibarra"), nos quedamos
+        // solo con esos, mucho más precisos que la lista cruda.
+        if (significantWords.length > 1) {
+            const refined = items.filter(name => {
+                const normalized = name.toLowerCase();
+                return significantWords.every(w => normalized.includes(w.toLowerCase()));
+            });
+            if (refined.length > 0) items = refined;
+        }
+
+        // Más de ~8 resultados normalmente significa que la consulta era
+        // demasiado genérica (ej. solo "agua") — pedirle al cliente que
+        // afine en vez de mandarle una lista enorme por WhatsApp.
+        if (items.length > 8) {
+            return { success: false, error: `Encontré demasiados resultados parecidos a "${query}" (${items.length}). Sé más específico (ej. agrega la ciudad o empresa exacta).` };
+        }
+        return { success: true, candidates: items };
+    } catch (error) {
+        console.error('❌ Error buscando el servicio:', error.message);
+        return { success: false, error: error.message };
+    } finally {
+        await browser.close();
+    }
+}
+
 async function payBill(serviceName, reference, { confirm = false } = {}) {
     let browser, context, page;
     try {
@@ -637,6 +736,7 @@ async function processOrder(productQuery, opts = {}) {
 module.exports = {
     sellTopup,
     payBill,
+    findBillService,
     processOrder
 };
 
