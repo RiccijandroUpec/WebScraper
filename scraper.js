@@ -114,7 +114,17 @@ async function ensureLoggedIn(page) {
     if (fs.existsSync(SESSION_PATH)) {
         console.log('[LOGIN] Probando sesión guardada...');
         await page.goto('https://bemovil.net/backoffice/sell', { waitUntil: 'networkidle', timeout: 20000 }).catch(() => {});
-        if (page.url().includes('/backoffice')) {
+        // bemovil es una SPA: cuando la sesión caducó, la URL sigue mostrando
+        // /backoffice/sell (el guard de ruta renderiza el login SIN navegar
+        // a otra URL), así que checar page.url() no detecta una sesión
+        // muerta — confirmado en producción: pasaba este chequeo y luego el
+        // scraper se colgaba 8s esperando "Buscar producto" en lo que en
+        // realidad era la pantalla de login. Verificamos el elemento real.
+        const sessionValid = await page.getByLabel('Buscar producto')
+            .waitFor({ state: 'visible', timeout: 5000 })
+            .then(() => true)
+            .catch(() => false);
+        if (sessionValid) {
             console.log('[LOGIN] Sesión reutilizada, sin necesidad de login.');
             return;
         }
@@ -147,7 +157,9 @@ async function sellTopup(operator, phone, amount) {
         console.log(`   Monto:    $${amount}`);
         console.log('============================================');
 
-        await page.goto('https://bemovil.net/backoffice/sell', { waitUntil: 'networkidle', timeout: 20000 });
+        // ensureLoggedIn() ya deja la página cargada en /backoffice/sell con
+        // sesión confirmada — un goto adicional aquí recarga la SPA y puede
+        // dejarla en un estado inconsistente (confirmado en producción).
         await page.waitForTimeout(2000);
 
         // El buscador principal ("Buscar producto") filtra y agrupa resultados
@@ -267,7 +279,9 @@ async function payBill(serviceName, reference, { confirm = false } = {}) {
         console.log(`   Referencia: ${reference}`);
         console.log('============================================');
 
-        await page.goto('https://bemovil.net/backoffice/sell', { waitUntil: 'networkidle', timeout: 20000 });
+        // ensureLoggedIn() ya deja la página cargada en /backoffice/sell con
+        // sesión confirmada — un goto adicional aquí recarga la SPA y puede
+        // dejarla en un estado inconsistente (confirmado en producción).
         await page.waitForTimeout(2000);
 
         // El buscador principal filtra entre Servipagos / Ser. Básicos / Otros
@@ -438,7 +452,9 @@ async function processOrder(productQuery, opts = {}) {
         console.log(`🛒 ${dryRun ? 'INSPECCIONANDO' : confirm ? 'CONFIRMANDO' : 'PREPARANDO'} PEDIDO: ${productQuery}`);
         console.log('============================================');
 
-        await page.goto('https://bemovil.net/backoffice/sell', { waitUntil: 'networkidle', timeout: 20000 });
+        // ensureLoggedIn() ya deja la página cargada en /backoffice/sell con
+        // sesión confirmada — un goto adicional aquí recarga la SPA y puede
+        // dejarla en un estado inconsistente (confirmado en producción).
         await page.waitForTimeout(2000);
 
         console.log(`   🔎 Buscando "${productQuery}" en el buscador de productos...`);
