@@ -101,11 +101,12 @@ No hay un PIN fijo — el flujo coincide con el negocio real (el cliente paga en
 Hallazgos no obvios de pruebas reales (ver también comentarios en `scraper.js`):
 
 - 🚫 **BeMovil bloquea Chromium headless** con un HTTP 400 disfrazado de error de "transacción en proceso" — por eso `scraper.js` usa `headless:false` (Xvfb en Docker) + user-agent real + tecleo humano en el login
-- 💾 Sesión persistida en `.bemovil-session.json` (gitignored) — solo hace login completo si caducó
+- 💾 Sesión persistida en `.bemovil-session.json` (gitignored) — solo hace login completo si caducó. **Ojo:** ese archivo vive dentro del contenedor, no en un volumen — un `docker compose up --build` lo descarta y fuerza un login real en el próximo arranque
+- 🔐 **Detectar sesión caducada por la URL no funciona**: BeMovil es una SPA, la URL sigue mostrando `/backoffice/sell` aunque la sesión haya muerto. La única señal confiable es la **ausencia** del botón "Continuar" del login (ver `ensureLoggedIn()`)
 - 🏷️ Los inputs usan `<label for="...">` flotante, no `placeholder`
 - 🪟 Los modales usan la clase real `dialog-root`/`dialog-section`, no `[class*="modal"]`
 - 📡 Operadoras de recarga **válidas**: Claro, Movistar, Tuenti, CNT, Akimovil, Maxiplus (¡"OpenMobile" no existe!)
-- 🔎 El buscador de BeMovil es literal, no difuso: hace falta el nombre completo ("Registro Civil", "CNEL Guayaquil")
+- 🔎 **El buscador de BeMovil es literal**, con cientos de variantes regionales que nadie conoce de antemano (ej. el real es "AGUA EMAPA - IBARRA", no "EMAPA Ibarra" ni "Agua Ibarra"). Por eso `findBillService()` busca en vivo contra BeMovil y le pregunta al cliente cuando hay varias coincidencias, en vez de adivinar — no usar un catálogo estático como fuente de verdad, está incompleto y se desactualiza
 
 ---
 
@@ -130,6 +131,7 @@ Hallazgos no obvios de pruebas reales (ver también comentarios en `scraper.js`)
 | 🔓 Login real anti-bot | Headed + Xvfb, tecleo humano, sesión reutilizada automáticamente |
 | 📱 Recargas | 6 operadoras reales verificadas |
 | 💧 Pago de servicios | Verificado con CNT, Agua, SRI — detecta banners de error específicos |
+| 🔎 Resolución en vivo del servicio | `findBillService()` busca en BeMovil real (no un catálogo estático) y pregunta al cliente si hay ambigüedad — verificado end-to-end con una consulta real |
 | 🛍️ Cualquier otro producto | `processOrder()` genérico, verificado contra 136 productos del catálogo |
 | 🔢 Confirmación por código | Código nuevo por pedido, vía administrador |
 | 🗄️ Persistencia en MySQL | Con fallback a memoria si la BD no está disponible |
@@ -149,6 +151,8 @@ Hallazgos no obvios de pruebas reales (ver también comentarios en `scraper.js`)
 | 2 | Pega2/3/4 (lotería): `processOrder` detecta el selector pero no completa el envío final |
 | 3 | Internacionales: descubrimiento verificado, llenado completo de campos sin probar |
 | 4 | BD existente con la versión vieja necesita `ALTER TABLE transactions MODIFY type ENUM('topup','bill','order')` manual |
+| 5 | `.bemovil-session.json` no vive en un volumen — cada `docker compose up --build` la descarta y fuerza un login real nuevo (riesgo de detección anti-bot si se reconstruye muy seguido) |
+| 6 | `processOrder` (productos fuera de `bill`) todavía no tiene la resolución en vivo / desambiguación que `findBillService` sí tiene — mismo problema de nombres literales, sin el mismo arreglo aún |
 
 ---
 
