@@ -209,7 +209,21 @@ async function callDeepSeekMessages(messages) {
     let text = response.data?.choices?.[0]?.message?.content;
     if (!text) return null;
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(text);
+    try {
+      return JSON.parse(text);
+    } catch (parseError) {
+      // A pesar de la instrucción "SOLO JSON", DeepSeek a veces antepone
+      // texto conversacional (ej. "Perfecto, ...") antes del JSON real —
+      // confirmado en producción, tumbaba toda la respuesta con "Error
+      // interno" en vez de degradar con gracia. Como último intento,
+      // extraemos el primer objeto/array JSON dentro del texto.
+      const match = text.match(/[{[][\s\S]*[}\]]/);
+      if (match) {
+        try { return JSON.parse(match[0]); } catch (e) {}
+      }
+      console.error('[DEEPSEEK] Respuesta no es JSON valido:', text.substring(0, 200));
+      return null;
+    }
   } catch (error) {
     console.error('[DEEPSEEK] Error:', error?.response?.data || error.message);
     return null;
